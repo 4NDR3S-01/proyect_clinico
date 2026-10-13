@@ -52,6 +52,42 @@ class UsuarioController extends Controller
         ]);
     }
 
+    public function listarAsistentes(): JsonResponse
+    {
+        $asistentes = $this
+            ->usuarioService
+            ->listarAsistentes();
+
+        return response()->json([
+            'data' => $asistentes,
+        ]);
+    }
+
+    public function verAsistente(
+        string $id
+    ): JsonResponse {
+        $asistente = $this
+            ->usuarioService
+            ->obtenerAsistentePorId($id);
+
+        if (!$asistente) {
+            return response()->json([
+                'message' => 'Asistente no encontrado.',
+            ], 404);
+        }
+
+        return response()->json([
+            'data' => [
+                'id' => $asistente->id,
+                'name' => $asistente->name,
+                'email' => $asistente->email,
+                'username' => $asistente->username,
+                'role' => $asistente->role,
+                'activo' => $asistente->activo,
+            ],
+        ]);
+    }
+
     public function crearAsistente(
         Request $request
     ): JsonResponse {
@@ -87,12 +123,6 @@ class UsuarioController extends Controller
                 $request->user()
             );
 
-        if ($resultado['estado'] === 'ya_existe') {
-            return response()->json([
-                'message' => 'Ya existe una cuenta de asistente registrada.',
-            ], 409);
-        }
-
         $asistente = $resultado['asistente'];
 
         return response()->json([
@@ -108,42 +138,20 @@ class UsuarioController extends Controller
         ], 201);
     }
 
-    public function verAsistente(): JsonResponse
-    {
-        $asistente = $this
-            ->usuarioService
-            ->obtenerAsistente();
-
-        if (!$asistente) {
-            return response()->json([
-                'message' => 'No existe una cuenta de asistente.',
-            ], 404);
-        }
-
-        return response()->json([
-            'data' => [
-                'id' => $asistente->id,
-                'name' => $asistente->name,
-                'email' => $asistente->email,
-                'username' => $asistente->username,
-                'role' => $asistente->role,
-                'activo' => $asistente->activo,
-            ],
-        ]);
-    }
-
     public function desactivarAsistente(
-        Request $request
+        Request $request,
+        string $id
     ): JsonResponse {
         $resultado = $this
             ->usuarioService
             ->desactivarAsistente(
+                $id,
                 $request->user()
             );
 
         if ($resultado['estado'] === 'no_existe') {
             return response()->json([
-                'message' => 'No existe una cuenta de asistente.',
+                'message' => 'Asistente no encontrado.',
             ], 404);
         }
 
@@ -168,17 +176,19 @@ class UsuarioController extends Controller
     }
 
     public function activarAsistente(
-        Request $request
+        Request $request,
+        string $id
     ): JsonResponse {
         $resultado = $this
             ->usuarioService
             ->activarAsistente(
+                $id,
                 $request->user()
             );
 
         if ($resultado['estado'] === 'no_existe') {
             return response()->json([
-                'message' => 'No existe una cuenta de asistente.',
+                'message' => 'Asistente no encontrado.',
             ], 404);
         }
 
@@ -203,7 +213,8 @@ class UsuarioController extends Controller
     }
 
     public function cambiarPasswordAsistente(
-        Request $request
+        Request $request,
+        string $id
     ): JsonResponse {
         $datos = $request->validate([
             'password' => [
@@ -217,33 +228,36 @@ class UsuarioController extends Controller
         $resultado = $this
             ->usuarioService
             ->cambiarPasswordAsistente(
+                $id,
                 $datos['password'],
                 $request->user()
             );
 
         if ($resultado === 'no_existe') {
             return response()->json([
-                'message' => 'No existe una cuenta de asistente.',
+                'message' => 'Asistente no encontrado.',
             ], 404);
         }
 
         return response()->json([
-            'message' => 'Contraseña de la asistente actualizada correctamente.',
+            'message' => 'Contraseña del asistente actualizada correctamente.',
         ]);
     }
 
     public function eliminarAsistente(
-        Request $request
+        Request $request,
+        string $id
     ): JsonResponse {
         $resultado = $this
             ->usuarioService
             ->eliminarAsistente(
+                $id,
                 $request->user()
             );
 
         if ($resultado === 'no_existe') {
             return response()->json([
-                'message' => 'No existe una cuenta de asistente.',
+                'message' => 'Asistente no encontrado.',
             ], 404);
         }
 

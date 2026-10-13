@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Egreso;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class EgresoService
 {
@@ -68,25 +69,27 @@ class EgresoService
         array $datos,
         User $user
     ): Egreso {
-        $egreso = Egreso::create([
-            'fecha' => $datos['fecha'],
-            'concepto' => $datos['concepto'],
-            'monto' => $datos['monto'],
-        ]);
+        return DB::transaction(function () use ($datos, $user) {
+            $egreso = Egreso::create([
+                'fecha' => $datos['fecha'],
+                'concepto' => $datos['concepto'],
+                'monto' => $datos['monto'],
+            ]);
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'crear',
-            "Registraste un egreso de $" . number_format(
-                (float) $egreso->monto,
-                2,
-                '.',
-                ''
-            ) . " por {$egreso->concepto}."
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'egresos',
+                'crear',
+                "Registraste un egreso de $" . number_format(
+                    (float) $egreso->monto,
+                    2,
+                    '.',
+                    ''
+                ) . " por {$egreso->concepto}."
+            );
 
-        return $egreso;
+            return $egreso;
+        });
     }
 
     public function actualizar(
@@ -94,57 +97,61 @@ class EgresoService
         array $datos,
         User $user
     ): ?Egreso {
-        $egreso = Egreso::find($id);
+        return DB::transaction(function () use ($id, $datos, $user) {
+            $egreso = Egreso::find($id);
 
-        if (!$egreso) {
-            return null;
-        }
+            if (!$egreso) {
+                return null;
+            }
 
-        $egreso->update($datos);
+            $egreso->update($datos);
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'actualizar',
-            "Actualizaste un egreso de $" . number_format(
-                (float) $egreso->monto,
-                2,
-                '.',
-                ''
-            ) . " por {$egreso->concepto}."
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'egresos',
+                'actualizar',
+                "Actualizaste un egreso de $" . number_format(
+                    (float) $egreso->monto,
+                    2,
+                    '.',
+                    ''
+                ) . " por {$egreso->concepto}."
+            );
 
-        return $egreso->fresh();
+            return $egreso->fresh();
+        });
     }
 
     public function eliminar(
         string $id,
         User $user
     ): bool {
-        $egreso = Egreso::find($id);
+        return DB::transaction(function () use ($id, $user) {
+            $egreso = Egreso::find($id);
 
-        if (!$egreso) {
-            return false;
-        }
+            if (!$egreso) {
+                return false;
+            }
 
-        $monto = $egreso->monto;
-        $concepto = $egreso->concepto;
+            $monto = $egreso->monto;
+            $concepto = $egreso->concepto;
 
-        $egreso->delete();
+            $egreso->delete();
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'eliminar',
-            "Eliminaste un egreso de $" . number_format(
-                (float) $monto,
-                2,
-                '.',
-                ''
-            ) . " por {$concepto}."
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'egresos',
+                'eliminar',
+                "Eliminaste un egreso de $" . number_format(
+                    (float) $monto,
+                    2,
+                    '.',
+                    ''
+                ) . " por {$concepto}."
+            );
 
-        return true;
+            return true;
+        });
     }
 
     public function resumen(

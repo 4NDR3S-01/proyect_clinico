@@ -14,12 +14,23 @@ class AgendaHorariosTest extends TestCase
     {
         parent::setUp();
 
-        $pacientes = require database_path('migrations/2026_09_25_012937_create_pacientes_table.php');
-        $pacientes->up();
-        $agenda = require database_path('migrations/2026_10_02_191138_create_agendas_table.php');
-        $agenda->up();
+        foreach ([
+            '0001_01_01_000000_create_users_table.php',
+            '2026_09_25_012937_create_pacientes_table.php',
+            '2026_09_25_163636_add_username_and_role_to_users_table.php',
+            '2026_10_02_191138_create_agendas_table.php',
+            '2026_10_03_030037_add_clinical_fields_to_agenda_table.php',
+            '2026_10_03_191429_create_accion_registradas_table.php',
+        ] as $migration) {
+            (require database_path('migrations/'.$migration))->up();
+        }
 
-        Sanctum::actingAs(new User(['role' => 'doctora']));
+        Sanctum::actingAs(User::create([
+            'name' => 'Doctora de prueba',
+            'email' => 'doctora@example.test',
+            'password' => 'password-prueba',
+            'role' => 'doctora',
+        ]));
     }
 
     private function paciente(): Paciente
@@ -183,6 +194,7 @@ class AgendaHorariosTest extends TestCase
     {
         $paciente = $this->paciente();
         $cita = $this->bloque('cita_medica', $paciente->id);
+        $cita->update(['diagnostico' => 'Diagnostico', 'tratamiento' => 'Tratamiento']);
 
         $this->putJson('/api/agenda/'.$cita->id.'/completar')->assertOk();
         $this->postJson('/api/agenda/personal', [

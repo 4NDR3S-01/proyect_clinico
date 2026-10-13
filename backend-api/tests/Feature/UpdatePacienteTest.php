@@ -14,9 +14,14 @@ class UpdatePacienteTest extends TestCase
     {
         parent::setUp();
 
-        // Only this table is needed; other migrations require PostgreSQL.
-        $migration = require database_path('migrations/2026_09_25_012937_create_pacientes_table.php');
-        $migration->up();
+        foreach ([
+            '0001_01_01_000000_create_users_table.php',
+            '2026_09_25_012937_create_pacientes_table.php',
+            '2026_09_25_163636_add_username_and_role_to_users_table.php',
+            '2026_10_03_191429_create_accion_registradas_table.php',
+        ] as $migration) {
+            (require database_path('migrations/'.$migration))->up();
+        }
     }
 
     private function paciente(): Paciente
@@ -35,7 +40,7 @@ class UpdatePacienteTest extends TestCase
         $paciente = $this->paciente();
 
         foreach (['doctora', 'asistente'] as $role) {
-            Sanctum::actingAs(new User(['role' => $role]));
+            Sanctum::actingAs(User::factory()->create(['role' => $role]));
 
             $this->putJson('/api/pacientes/'.$paciente->id, [
                 'nombres' => 'Actualizado por '.$role,

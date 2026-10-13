@@ -59,22 +59,23 @@ Route::prefix('auth')->group(function () {
 
 // Usuarios
 Route::middleware('auth:sanctum', 'role:doctora')->prefix('usuarios')->group(function () {
-
     // Lista de cuentas
     Route::get('/', [UsuarioController::class, 'index']);
 
-    // Gestión del asistente
-    Route::get('/asistente', [UsuarioController::class, 'verAsistente']);
+    // Gestión de asistentes
+    Route::get('/asistentes', [UsuarioController::class, 'listarAsistentes']);
 
-    Route::post('/asistente', [UsuarioController::class, 'crearAsistente']);
+    Route::post('/asistentes', [UsuarioController::class, 'crearAsistente']);
 
-    Route::put('/asistente/desactivar', [UsuarioController::class, 'desactivarAsistente']);
+    Route::get('/asistentes/{id}', [UsuarioController::class, 'verAsistente']);
 
-    Route::put('/asistente/activar', [UsuarioController::class, 'activarAsistente']);
+    Route::put('/asistentes/{id}/desactivar', [UsuarioController::class, 'desactivarAsistente']);
 
-    Route::put('/asistente/password', [UsuarioController::class, 'cambiarPasswordAsistente']);
+    Route::put('/asistentes/{id}/activar', [UsuarioController::class, 'activarAsistente']);
 
-    Route::delete('/asistente', [UsuarioController::class, 'eliminarAsistente']);
+    Route::put('/asistentes/{id}/password', [UsuarioController::class, 'cambiarPasswordAsistente']);
+
+    Route::delete('/asistentes/{id}', [UsuarioController::class, 'eliminarAsistente']);
 
     // Gestión general de cuentas
     Route::put('/{id}/desactivar', [UsuarioController::class, 'desactivarUsuario']);
@@ -85,11 +86,7 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('usuarios')->group(fun
 
     // Ver una cuenta específica
     Route::get('/{id}', [UsuarioController::class, 'show']);
-
 });
-
-
-
 
 // Pacientes
 Route::middleware('auth:sanctum','role:doctora,asistente')->prefix('pacientes')->group(function () {

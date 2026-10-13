@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Paciente;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 class UsuarioService
 {
@@ -30,323 +31,352 @@ class UsuarioService
         return User::find($id);
     }
 
-    public function obtenerAsistente(): ?User
+    public function listarAsistentes()
     {
         return User::where(
             'role',
             'asistente'
-        )->first();
+        )
+            ->orderBy('created_at', 'desc')
+            ->get();
+    }
+
+    public function obtenerAsistentePorId(
+        string $id
+    ): ?User {
+        return User::where(
+            'role',
+            'asistente'
+        )
+            ->where('id', $id)
+            ->first();
     }
 
     public function crearAsistente(
         array $datos,
         User $user
     ): array {
-        $asistenteExistente = $this->obtenerAsistente();
+        return DB::transaction(function () use ($datos, $user) {
+            $asistente = User::create([
+                'name' => $datos['name'],
+                'email' => $datos['email'],
+                'username' => $datos['username'],
+                'password' => $datos['password'],
+                'role' => 'asistente',
+                'paciente_id' => null,
+                'activo' => true,
+            ]);
 
-        if ($asistenteExistente) {
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'crear_asistente',
+                "Creaste la cuenta del asistente {$asistente->name}."
+            );
+
             return [
-                'estado' => 'ya_existe',
-                'asistente' => null,
+                'estado' => 'creado',
+                'asistente' => $asistente,
             ];
-        }
-
-        $asistente = User::create([
-            'name' => $datos['name'],
-            'email' => $datos['email'],
-            'username' => $datos['username'],
-            'password' => $datos['password'],
-            'role' => 'asistente',
-            'paciente_id' => null,
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'crear_asistente',
-            "Creaste la cuenta del asistente {$asistente->name}."
-        );
-
-        return [
-            'estado' => 'creado',
-            'asistente' => $asistente,
-        ];
+        });
     }
 
     public function desactivarAsistente(
+        string $id,
         User $user
     ): array {
-        $asistente = $this->obtenerAsistente();
+        return DB::transaction(function () use ($id, $user) {
+            $asistente = $this->obtenerAsistentePorId($id);
 
-        if (!$asistente) {
+            if (!$asistente) {
+                return [
+                    'estado' => 'no_existe',
+                    'asistente' => null,
+                ];
+            }
+
+            if (!$asistente->activo) {
+                return [
+                    'estado' => 'ya_desactivado',
+                    'asistente' => $asistente,
+                ];
+            }
+
+            $asistente->update([
+                'activo' => false,
+            ]);
+
+            $asistente->tokens()->delete();
+
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'desactivar_asistente',
+                "Desactivaste la cuenta del asistente {$asistente->name}."
+            );
+
             return [
-                'estado' => 'no_existe',
-                'asistente' => null,
+                'estado' => 'desactivado',
+                'asistente' => $asistente->fresh(),
             ];
-        }
-
-        if (!$asistente->activo) {
-            return [
-                'estado' => 'ya_desactivado',
-                'asistente' => $asistente,
-            ];
-        }
-
-        $asistente->update([
-            'activo' => false,
-        ]);
-
-        $asistente->tokens()->delete();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'desactivar_asistente',
-            "Desactivaste la cuenta del asistente {$asistente->name}."
-        );
-
-        return [
-            'estado' => 'desactivado',
-            'asistente' => $asistente->fresh(),
-        ];
+        });
     }
 
     public function activarAsistente(
+        string $id,
         User $user
     ): array {
-        $asistente = $this->obtenerAsistente();
+        return DB::transaction(function () use ($id, $user) {
+            $asistente = $this->obtenerAsistentePorId($id);
 
-        if (!$asistente) {
+            if (!$asistente) {
+                return [
+                    'estado' => 'no_existe',
+                    'asistente' => null,
+                ];
+            }
+
+            if ($asistente->activo) {
+                return [
+                    'estado' => 'ya_activo',
+                    'asistente' => $asistente,
+                ];
+            }
+
+            $asistente->update([
+                'activo' => true,
+            ]);
+
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'activar_asistente',
+                "Activaste la cuenta del asistente {$asistente->name}."
+            );
+
             return [
-                'estado' => 'no_existe',
-                'asistente' => null,
+                'estado' => 'activado',
+                'asistente' => $asistente->fresh(),
             ];
-        }
-
-        if ($asistente->activo) {
-            return [
-                'estado' => 'ya_activo',
-                'asistente' => $asistente,
-            ];
-        }
-
-        $asistente->update([
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'activar_asistente',
-            "Activaste la cuenta del asistente {$asistente->name}."
-        );
-
-        return [
-            'estado' => 'activado',
-            'asistente' => $asistente->fresh(),
-        ];
+        });
     }
 
     public function cambiarPasswordAsistente(
+        string $id,
         string $password,
         User $user
     ): string {
-        $asistente = $this->obtenerAsistente();
+        return DB::transaction(function () use (
+            $id,
+            $password,
+            $user
+        ) {
+            $asistente = $this->obtenerAsistentePorId($id);
 
-        if (!$asistente) {
-            return 'no_existe';
-        }
+            if (!$asistente) {
+                return 'no_existe';
+            }
 
-        $asistente->update([
-            'password' => $password,
-        ]);
+            $asistente->update([
+                'password' => $password,
+            ]);
 
-        $asistente->tokens()->delete();
+            $asistente->tokens()->delete();
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'cambiar_password_asistente',
-            "Cambiaste la contraseña del asistente {$asistente->name}."
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'cambiar_password_asistente',
+                "Cambiaste la contraseña del asistente {$asistente->name}."
+            );
 
-        return 'actualizado';
+            return 'actualizado';
+        });
     }
 
     public function eliminarAsistente(
+        string $id,
         User $user
     ): string {
-        $asistente = $this->obtenerAsistente();
+        return DB::transaction(function () use ($id, $user) {
+            $asistente = $this->obtenerAsistentePorId($id);
 
-        if (!$asistente) {
-            return 'no_existe';
-        }
+            if (!$asistente) {
+                return 'no_existe';
+            }
 
-        $nombreAsistente = $asistente->name;
+            $nombreAsistente = $asistente->name;
 
-        $asistente->tokens()->delete();
-        $asistente->delete();
+            $asistente->tokens()->delete();
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'eliminar_asistente',
-            "Eliminaste la cuenta del asistente {$nombreAsistente}."
-        );
+            $asistente->delete();
 
-        return 'eliminado';
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'eliminar_asistente',
+                "Eliminaste la cuenta del asistente {$nombreAsistente}."
+            );
+
+            return 'eliminado';
+        });
     }
 
     public function desactivarUsuario(
         string $id,
         User $user
     ): array {
-        $usuario = User::find($id);
+        return DB::transaction(function () use ($id, $user) {
+            $usuario = User::find($id);
 
-        if (!$usuario) {
+            if (!$usuario) {
+                return [
+                    'estado' => 'no_encontrado',
+                    'usuario' => null,
+                ];
+            }
+
+            if ($usuario->id === $user->id) {
+                return [
+                    'estado' => 'propia_cuenta',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            if (!$usuario->activo) {
+                return [
+                    'estado' => 'ya_desactivado',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            $usuario->update([
+                'activo' => false,
+            ]);
+
+            $usuario->tokens()->delete();
+
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'desactivar_usuario',
+                "Desactivaste la cuenta de {$usuario->name}."
+            );
+
             return [
-                'estado' => 'no_encontrado',
-                'usuario' => null,
+                'estado' => 'desactivado',
+                'usuario' => $usuario->fresh(),
             ];
-        }
-
-        if ($usuario->id === $user->id) {
-            return [
-                'estado' => 'propia_cuenta',
-                'usuario' => $usuario,
-            ];
-        }
-
-        if (!$usuario->activo) {
-            return [
-                'estado' => 'ya_desactivado',
-                'usuario' => $usuario,
-            ];
-        }
-
-        $usuario->update([
-            'activo' => false,
-        ]);
-
-        $usuario->tokens()->delete();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'desactivar_usuario',
-            "Desactivaste la cuenta de {$usuario->name}."
-        );
-
-        return [
-            'estado' => 'desactivado',
-            'usuario' => $usuario->fresh(),
-        ];
+        });
     }
 
     public function activarUsuario(
         string $id,
         User $user
     ): array {
-        $usuario = User::find($id);
+        return DB::transaction(function () use ($id, $user) {
+            $usuario = User::find($id);
 
-        if (!$usuario) {
+            if (!$usuario) {
+                return [
+                    'estado' => 'no_encontrado',
+                    'usuario' => null,
+                ];
+            }
+
+            if ($usuario->activo) {
+                return [
+                    'estado' => 'ya_activo',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            if (
+                $usuario->role === 'paciente' &&
+                !$usuario->paciente_id
+            ) {
+                return [
+                    'estado' => 'paciente_sin_vinculo',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            $usuario->update([
+                'activo' => true,
+            ]);
+
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'activar_usuario',
+                "Activaste la cuenta de {$usuario->name}."
+            );
+
             return [
-                'estado' => 'no_encontrado',
-                'usuario' => null,
+                'estado' => 'activado',
+                'usuario' => $usuario->fresh(),
             ];
-        }
-
-        if ($usuario->activo) {
-            return [
-                'estado' => 'ya_activo',
-                'usuario' => $usuario,
-            ];
-        }
-
-        if (
-            $usuario->role === 'paciente' &&
-            !$usuario->paciente_id
-        ) {
-            return [
-                'estado' => 'paciente_sin_vinculo',
-                'usuario' => $usuario,
-            ];
-        }
-
-        $usuario->update([
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'activar_usuario',
-            "Activaste la cuenta de {$usuario->name}."
-        );
-
-        return [
-            'estado' => 'activado',
-            'usuario' => $usuario->fresh(),
-        ];
+        });
     }
 
     public function desvincularPaciente(
         string $id,
         User $user
     ): array {
-        $usuario = User::find($id);
+        return DB::transaction(function () use ($id, $user) {
+            $usuario = User::find($id);
 
-        if (!$usuario) {
+            if (!$usuario) {
+                return [
+                    'estado' => 'no_encontrado',
+                    'usuario' => null,
+                ];
+            }
+
+            if ($usuario->role !== 'paciente') {
+                return [
+                    'estado' => 'no_es_paciente',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            if (!$usuario->paciente_id) {
+                return [
+                    'estado' => 'ya_desvinculado',
+                    'usuario' => $usuario,
+                ];
+            }
+
+            $paciente = Paciente::find(
+                $usuario->paciente_id
+            );
+
+            $codigoPaciente = $paciente
+                ? $paciente->codigo_paciente
+                : null;
+
+            $usuario->tokens()->delete();
+
+            $usuario->update([
+                'paciente_id' => null,
+                'activo' => false,
+            ]);
+
+            $detalle = $codigoPaciente
+                ? "Desvinculaste la cuenta del paciente {$codigoPaciente}."
+                : "Desvinculaste la cuenta de {$usuario->name}.";
+
+            AuditoriaService::registrarAccion(
+                $user,
+                'usuarios',
+                'desvincular_paciente',
+                $detalle
+            );
+
             return [
-                'estado' => 'no_encontrado',
-                'usuario' => null,
+                'estado' => 'desvinculado',
+                'usuario' => $usuario->fresh(),
             ];
-        }
-
-        if ($usuario->role !== 'paciente') {
-            return [
-                'estado' => 'no_es_paciente',
-                'usuario' => $usuario,
-            ];
-        }
-
-        if (!$usuario->paciente_id) {
-            return [
-                'estado' => 'ya_desvinculado',
-                'usuario' => $usuario,
-            ];
-        }
-
-        $paciente = Paciente::find(
-            $usuario->paciente_id
-        );
-
-        $codigoPaciente = $paciente
-            ? $paciente->codigo_paciente
-            : null;
-
-        $usuario->tokens()->delete();
-
-        $usuario->update([
-            'paciente_id' => null,
-            'activo' => false,
-        ]);
-
-        $detalle = $codigoPaciente
-            ? "Desvinculaste la cuenta del paciente {$codigoPaciente}."
-            : "Desvinculaste la cuenta de {$usuario->name}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'usuarios',
-            'desvincular_paciente',
-            $detalle
-        );
-
-        return [
-            'estado' => 'desvinculado',
-            'usuario' => $usuario->fresh(),
-        ];
+        });
     }
 }

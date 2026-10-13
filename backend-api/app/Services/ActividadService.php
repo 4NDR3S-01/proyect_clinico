@@ -6,6 +6,7 @@ use App\Models\Actividad;
 use App\Models\Paciente;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ActividadService
 {
@@ -84,30 +85,32 @@ class ActividadService
         array $datos,
         User $user
     ): Actividad {
-        $paciente = Paciente::where(
-            'codigo_paciente',
-            $datos['codigo_paciente']
-        )->firstOrFail();
+        return DB::transaction(function () use ($datos, $user) {
+            $paciente = Paciente::where(
+                'codigo_paciente',
+                $datos['codigo_paciente']
+            )->firstOrFail();
 
-        $actividad = Actividad::create([
-            'paciente_id' => $paciente->id,
-            'fecha' => $datos['fecha'],
-            'actividad' => $datos['actividad'],
-            'precio' => $datos['precio'],
-        ]);
+            $actividad = Actividad::create([
+                'paciente_id' => $paciente->id,
+                'fecha' => $datos['fecha'],
+                'actividad' => $datos['actividad'],
+                'precio' => $datos['precio'],
+            ]);
 
-        $detalle = $user->role === 'doctora'
-            ? "Registraste una actividad para el paciente {$paciente->codigo_paciente}."
-            : "Asistente registró una actividad para el paciente {$paciente->codigo_paciente}.";
+            $detalle = $user->role === 'doctora'
+                ? "Registraste una actividad para el paciente {$paciente->codigo_paciente}."
+                : "Asistente registró una actividad para el paciente {$paciente->codigo_paciente}.";
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'crear',
-            $detalle
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'actividades',
+                'crear',
+                $detalle
+            );
 
-        return $actividad->load('paciente');
+            return $actividad->load('paciente');
+        });
     }
 
     public function actualizar(
@@ -115,79 +118,83 @@ class ActividadService
         array $datos,
         User $user
     ): ?Actividad {
-        $actividad = Actividad::find($id);
+        return DB::transaction(function () use ($id, $datos, $user) {
+            $actividad = Actividad::find($id);
 
-        if (!$actividad) {
-            return null;
-        }
+            if (!$actividad) {
+                return null;
+            }
 
-        if (isset($datos['codigo_paciente'])) {
-            $paciente = Paciente::where(
-                'codigo_paciente',
-                $datos['codigo_paciente']
-            )->firstOrFail();
+            if (isset($datos['codigo_paciente'])) {
+                $paciente = Paciente::where(
+                    'codigo_paciente',
+                    $datos['codigo_paciente']
+                )->firstOrFail();
 
-            $actividad->paciente_id = $paciente->id;
-        }
+                $actividad->paciente_id = $paciente->id;
+            }
 
-        if (isset($datos['fecha'])) {
-            $actividad->fecha = $datos['fecha'];
-        }
+            if (isset($datos['fecha'])) {
+                $actividad->fecha = $datos['fecha'];
+            }
 
-        if (isset($datos['actividad'])) {
-            $actividad->actividad = $datos['actividad'];
-        }
+            if (isset($datos['actividad'])) {
+                $actividad->actividad = $datos['actividad'];
+            }
 
-        if (isset($datos['precio'])) {
-            $actividad->precio = $datos['precio'];
-        }
+            if (isset($datos['precio'])) {
+                $actividad->precio = $datos['precio'];
+            }
 
-        $actividad->save();
+            $actividad->save();
 
-        $actividad->load('paciente');
+            $actividad->load('paciente');
 
-        $detalle = $user->role === 'doctora'
-            ? "Actualizaste una actividad del paciente {$actividad->paciente->codigo_paciente}."
-            : "Asistente actualizó una actividad del paciente {$actividad->paciente->codigo_paciente}.";
+            $detalle = $user->role === 'doctora'
+                ? "Actualizaste una actividad del paciente {$actividad->paciente->codigo_paciente}."
+                : "Asistente actualizó una actividad del paciente {$actividad->paciente->codigo_paciente}.";
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'actualizar',
-            $detalle
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'actividades',
+                'actualizar',
+                $detalle
+            );
 
-        return $actividad;
+            return $actividad;
+        });
     }
 
     public function eliminar(
         string $id,
         User $user
     ): bool {
-        $actividad = Actividad::with('paciente')
-            ->find($id);
+        return DB::transaction(function () use ($id, $user) {
+            $actividad = Actividad::with('paciente')
+                ->find($id);
 
-        if (!$actividad) {
-            return false;
-        }
+            if (!$actividad) {
+                return false;
+            }
 
-        $codigoPaciente =
-            $actividad->paciente->codigo_paciente;
+            $codigoPaciente =
+                $actividad->paciente->codigo_paciente;
 
-        $actividad->delete();
+            $actividad->delete();
 
-        $detalle = $user->role === 'doctora'
-            ? "Eliminaste una actividad del paciente {$codigoPaciente}."
-            : "Asistente eliminó una actividad del paciente {$codigoPaciente}.";
+            $detalle = $user->role === 'doctora'
+                ? "Eliminaste una actividad del paciente {$codigoPaciente}."
+                : "Asistente eliminó una actividad del paciente {$codigoPaciente}.";
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'eliminar',
-            $detalle
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'actividades',
+                'eliminar',
+                $detalle
+            );
 
-        return true;
+            return true;
+        });
     }
 
     public function buscarPacientePorCodigo(

@@ -14,67 +14,71 @@ class AuthService
         string $username,
         string $password
     ): array {
-        $user = User::where(
-            'username',
-            $username
-        )->first();
+        return DB::transaction(function () use ($username, $password) {
+            $user = User::where(
+                'username',
+                $username
+            )->first();
 
-        if (
-            !$user ||
-            !Hash::check($password, $user->password)
-        ) {
-            throw ValidationException::withMessages([
-                'username' => [
-                    'El usuario o la contraseña son incorrectos.',
-                ],
-            ]);
-        }
+            if (
+                !$user ||
+                !Hash::check($password, $user->password)
+            ) {
+                throw ValidationException::withMessages([
+                    'username' => [
+                        'El usuario o la contraseña son incorrectos.',
+                    ],
+                ]);
+            }
 
-        if (!$user->activo) {
-            throw ValidationException::withMessages([
-                'username' => [
-                    'Esta cuenta se encuentra desactivada.',
-                ],
-            ]);
-        }
+            if (!$user->activo) {
+                throw ValidationException::withMessages([
+                    'username' => [
+                        'Esta cuenta se encuentra desactivada.',
+                    ],
+                ]);
+            }
 
-        $token = $user
-            ->createToken('auth_token')
-            ->plainTextToken;
+            $token = $user
+                ->createToken('auth_token')
+                ->plainTextToken;
 
-        if (
-            in_array(
-                $user->role,
-                ['doctora', 'asistente']
-            )
-        ) {
-            AuditoriaService::registrarSesion(
-                $user,
-                'inicio_sesion'
-            );
-        }
+            if (
+                in_array(
+                    $user->role,
+                    ['doctora', 'asistente']
+                )
+            ) {
+                AuditoriaService::registrarSesion(
+                    $user,
+                    'inicio_sesion'
+                );
+            }
 
-        return [
-            'user' => $user,
-            'token' => $token,
-        ];
+            return [
+                'user' => $user,
+                'token' => $token,
+            ];
+        });
     }
 
     public function logout(User $user): void
     {
-        if (
-            in_array(
-                $user->role,
-                ['doctora', 'asistente']
-            )
-        ) {
-            AuditoriaService::registrarSesion(
-                $user,
-                'cierre_sesion'
-            );
-        }
+        DB::transaction(function () use ($user) {
+            if (
+                in_array(
+                    $user->role,
+                    ['doctora', 'asistente']
+                )
+            ) {
+                AuditoriaService::registrarSesion(
+                    $user,
+                    'cierre_sesion'
+                );
+            }
 
-        $user->currentAccessToken()->delete();
+            $user->currentAccessToken()->delete();
+        });
     }
 
     public function registrarPaciente(
@@ -143,7 +147,7 @@ class AuthService
 
                 $user = User::create([
                     'name' => $paciente->nombres,
-                    'email' => null,
+                    'email' => $datos['email'],
                     'username' => $paciente->cedula,
                     'password' => $datos['password'],
                     'role' => 'paciente',

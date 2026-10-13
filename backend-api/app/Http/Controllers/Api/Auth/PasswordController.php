@@ -3,21 +3,64 @@
 namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Services\PasswordService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class PasswordController extends Controller
 {
-    public function forgotPassword(): JsonResponse
-    {
+    public function __construct(
+        private PasswordService $passwordService
+    ) {
+    }
+
+    public function forgotPassword(
+        Request $request
+    ): JsonResponse {
+        $datos = $request->validate([
+            'email' => [
+                'required',
+                'email',
+            ],
+        ]);
+
+        $this
+            ->passwordService
+            ->enviarEnlaceRecuperacion(
+                $datos['email']
+            );
+
         return response()->json([
-            'message' => 'Endpoint de recuperación de contraseña'
+            'message' => 'Se envió el enlace de recuperación al correo electrónico.',
         ]);
     }
 
-    public function resetPassword(): JsonResponse
-    {
+    public function resetPassword(
+        Request $request
+    ): JsonResponse {
+        $datos = $request->validate([
+            'email' => [
+                'required',
+                'email',
+            ],
+            'token' => [
+                'required',
+                'string',
+            ],
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'confirmed',
+            ],
+        ]);
+
+        $this
+            ->passwordService
+            ->restablecerPassword($datos);
+
         return response()->json([
-            'message' => 'Endpoint para restablecer contraseña'
+            'message' => 'Contraseña restablecida correctamente.',
         ]);
     }
 }

@@ -23,38 +23,40 @@ class PacienteService
         array $datos,
         User $user
     ): Paciente {
-        $numero = DB::scalar(
-            "SELECT nextval('codigo_paciente_seq')"
-        );
+        return DB::transaction(function () use ($datos, $user) {
+            $numero = DB::scalar(
+                "SELECT nextval('codigo_paciente_seq')"
+            );
 
-        $codigoPaciente = str_pad(
-            (string) $numero,
-            3,
-            '0',
-            STR_PAD_LEFT
-        );
+            $codigoPaciente = str_pad(
+                (string) $numero,
+                3,
+                '0',
+                STR_PAD_LEFT
+            );
 
-        $paciente = Paciente::create([
-            'codigo_paciente' => $codigoPaciente,
-            'nombres' => $datos['nombres'],
-            'cedula' => $datos['cedula'],
-            'telefono' => $datos['telefono'],
-            'direccion' => $datos['direccion'],
-            'fecha_nacimiento' => $datos['fecha_nacimiento'],
-        ]);
+            $paciente = Paciente::create([
+                'codigo_paciente' => $codigoPaciente,
+                'nombres' => $datos['nombres'],
+                'cedula' => $datos['cedula'],
+                'telefono' => $datos['telefono'] ?? null,
+                'direccion' => $datos['direccion'] ?? null,
+                'fecha_nacimiento' => $datos['fecha_nacimiento'] ?? null,
+            ]);
 
-        $detalle = $user->role === 'doctora'
-            ? "Registraste al paciente {$paciente->codigo_paciente}."
-            : "Asistente registró al paciente {$paciente->codigo_paciente}.";
+            $detalle = $user->role === 'doctora'
+                ? "Registraste al paciente {$paciente->codigo_paciente}."
+                : "Asistente registró al paciente {$paciente->codigo_paciente}.";
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'pacientes',
-            'crear',
-            $detalle
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'pacientes',
+                'crear',
+                $detalle
+            );
 
-        return $paciente;
+            return $paciente;
+        });
     }
 
     public function actualizar(
@@ -62,24 +64,26 @@ class PacienteService
         array $datos,
         User $user
     ): Paciente {
-        $paciente = Paciente::findOrFail($id);
+        return DB::transaction(function () use ($id, $datos, $user) {
+            $paciente = Paciente::findOrFail($id);
 
-        $paciente->update($datos);
+            $paciente->update($datos);
 
-        $paciente = $paciente->fresh();
+            $paciente = $paciente->fresh();
 
-        $detalle = $user->role === 'doctora'
-            ? "Actualizaste los datos del paciente {$paciente->codigo_paciente}."
-            : "Asistente actualizó los datos del paciente {$paciente->codigo_paciente}.";
+            $detalle = $user->role === 'doctora'
+                ? "Actualizaste los datos del paciente {$paciente->codigo_paciente}."
+                : "Asistente actualizó los datos del paciente {$paciente->codigo_paciente}.";
 
-        AuditoriaService::registrarAccion(
-            $user,
-            'pacientes',
-            'actualizar',
-            $detalle
-        );
+            AuditoriaService::registrarAccion(
+                $user,
+                'pacientes',
+                'actualizar',
+                $detalle
+            );
 
-        return $paciente;
+            return $paciente;
+        });
     }
 
     public function obtenerPerfil(User $user): ?Paciente
