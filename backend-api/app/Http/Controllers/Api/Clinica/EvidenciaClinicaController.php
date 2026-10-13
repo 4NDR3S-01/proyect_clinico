@@ -3,72 +3,65 @@
 namespace App\Http\Controllers\Api\Clinica;
 
 use App\Http\Controllers\Controller;
-use App\Models\EvidenciaClinica;
-use App\Models\Paciente;
-use App\Services\AuditoriaService;
+use App\Services\EvidenciaClinicaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EvidenciaClinicaController extends Controller
 {
-    public function index(Request $request): JsonResponse
-    {
-        $query = EvidenciaClinica::query()
-            ->with('paciente')
-            ->orderBy('fecha', 'desc');
+    public function __construct(
+        private EvidenciaClinicaService $evidenciaClinicaService
+    ) {
+    }
 
-        if ($request->filled('paciente_id')) {
-            $query->where(
-                'paciente_id',
-                $request->paciente_id
+    public function index(
+        Request $request
+    ): JsonResponse {
+        $evidencias = $this
+            ->evidenciaClinicaService
+            ->listar(
+                $request->only([
+                    'paciente_id',
+                    'tipo',
+                ])
             );
-        }
-
-        if ($request->filled('tipo')) {
-            $query->where(
-                'tipo',
-                $request->tipo
-            );
-        }
 
         return response()->json([
-            'data' => $query->get(),
+            'data' => $evidencias,
         ]);
     }
 
     public function porPaciente(
         string $pacienteId
     ): JsonResponse {
-        $paciente = Paciente::find($pacienteId);
+        $resultado = $this
+            ->evidenciaClinicaService
+            ->obtenerPorPaciente($pacienteId);
 
-        if (!$paciente) {
+        if (!$resultado['paciente']) {
             return response()->json([
                 'message' => 'Paciente no encontrado.',
             ], 404);
         }
 
-        $evidencias = EvidenciaClinica::where(
-            'paciente_id',
-            $pacienteId
-        )
-            ->orderBy('fecha', 'desc')
-            ->get();
-
         return response()->json([
             'paciente' => [
-                'id' => $paciente->id,
-                'codigo_paciente' => $paciente->codigo_paciente,
-                'nombres' => $paciente->nombres,
+                'id' => $resultado['paciente']->id,
+                'codigo_paciente' =>
+                    $resultado['paciente']->codigo_paciente,
+                'nombres' =>
+                    $resultado['paciente']->nombres,
             ],
-            'data' => $evidencias,
+            'data' => $resultado['evidencias'],
         ]);
     }
 
     public function show(
         string $id
     ): JsonResponse {
-        $evidencia = EvidenciaClinica::with('paciente')
-            ->find($id);
+        $evidencia = $this
+            ->evidenciaClinicaService
+            ->obtenerPorId($id);
 
         if (!$evidencia) {
             return response()->json([
@@ -124,31 +117,12 @@ class EvidenciaClinicaController extends Controller
             ],
         ]);
 
-        $evidencia = EvidenciaClinica::create([
-            'paciente_id' => $datos['paciente_id'],
-            'tipo' => $datos['tipo'],
-            'nombre_archivo' => $datos['nombre_archivo'],
-            'ruta_archivo' => $datos['ruta_archivo'],
-            'mime_type' => $datos['mime_type'],
-            'tamano' => $datos['tamano'],
-            'descripcion' => $datos['descripcion'] ?? null,
-            'fecha' => $datos['fecha'],
-        ]);
-
-        $paciente = Paciente::findOrFail(
-            $evidencia->paciente_id
-        );
-
-        $tipoTexto = $evidencia->tipo === 'rx'
-            ? 'una radiografía'
-            : 'un caso clínico';
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'evidencias_clinicas',
-            'crear',
-            "Registraste {$tipoTexto} para el paciente {$paciente->codigo_paciente}."
-        );
+        $evidencia = $this
+            ->evidenciaClinicaService
+            ->crear(
+                $datos,
+                $request->user()
+            );
 
         return response()->json([
             'message' => 'Evidencia clínica registrada correctamente.',
@@ -160,14 +134,6 @@ class EvidenciaClinicaController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $evidencia = EvidenciaClinica::find($id);
-
-        if (!$evidencia) {
-            return response()->json([
-                'message' => 'Evidencia clínica no encontrada.',
-            ], 404);
-        }
-
         $datos = $request->validate([
             'tipo' => [
                 'sometimes',
@@ -186,22 +152,19 @@ class EvidenciaClinicaController extends Controller
             ],
         ]);
 
-        $evidencia->update($datos);
+        $evidencia = $this
+            ->evidenciaClinicaService
+            ->actualizar(
+                $id,
+                $datos,
+                $request->user()
+            );
 
-        $paciente = Paciente::findOrFail(
-            $evidencia->paciente_id
-        );
-
-        $tipoTexto = $evidencia->tipo === 'rx'
-            ? 'una radiografía'
-            : 'un caso clínico';
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'evidencias_clinicas',
-            'actualizar',
-            "Actualizaste {$tipoTexto} del paciente {$paciente->codigo_paciente}."
-        );
+        if (!$evidencia) {
+            return response()->json([
+                'message' => 'Evidencia clínica no encontrada.',
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Evidencia clínica actualizada correctamente.',
@@ -213,32 +176,18 @@ class EvidenciaClinicaController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $evidencia = EvidenciaClinica::find($id);
+        $eliminada = $this
+            ->evidenciaClinicaService
+            ->eliminar(
+                $id,
+                $request->user()
+            );
 
-        if (!$evidencia) {
+        if (!$eliminada) {
             return response()->json([
                 'message' => 'Evidencia clínica no encontrada.',
             ], 404);
         }
-
-        $paciente = Paciente::findOrFail(
-            $evidencia->paciente_id
-        );
-
-        $tipoTexto = $evidencia->tipo === 'rx'
-            ? 'una radiografía'
-            : 'un caso clínico';
-
-        $codigoPaciente = $paciente->codigo_paciente;
-
-        $evidencia->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'evidencias_clinicas',
-            'eliminar',
-            "Eliminaste {$tipoTexto} del paciente {$codigoPaciente}."
-        );
 
         return response()->json([
             'message' => 'Evidencia clínica eliminada correctamente.',

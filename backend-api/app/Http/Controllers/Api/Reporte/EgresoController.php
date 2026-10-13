@@ -3,55 +3,39 @@
 namespace App\Http\Controllers\Api\Reporte;
 
 use App\Http\Controllers\Controller;
-use App\Models\Egreso;
-use App\Services\AuditoriaService;
-use Carbon\Carbon;
+use App\Services\EgresoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EgresoController extends Controller
 {
-    public function index(Request $request): JsonResponse
-    {
-        $query = Egreso::query()
-            ->orderBy('fecha', 'desc');
+    public function __construct(
+        private EgresoService $egresoService
+    ) {
+    }
 
-        if ($request->filled('fecha')) {
-            $query->whereDate('fecha', $request->fecha);
-        }
-
-        if ($request->filled('semana')) {
-            $fecha = Carbon::parse($request->semana);
-
-            $query->whereBetween('fecha', [
-                $fecha->copy()->startOfWeek(),
-                $fecha->copy()->endOfWeek(),
-            ]);
-        }
-
-        if (
-            $request->filled('mes') &&
-            $request->filled('anio')
-        ) {
-            $query->whereMonth('fecha', $request->mes)
-                ->whereYear('fecha', $request->anio);
-        }
-
-        if (
-            $request->filled('anio') &&
-            !$request->filled('mes')
-        ) {
-            $query->whereYear('fecha', $request->anio);
-        }
+    public function index(
+        Request $request
+    ): JsonResponse {
+        $egresos = $this->egresoService->listar(
+            $request->only([
+                'fecha',
+                'semana',
+                'mes',
+                'anio',
+            ])
+        );
 
         return response()->json([
-            'data' => $query->get(),
+            'data' => $egresos,
         ]);
     }
 
-    public function show(string $id): JsonResponse
-    {
-        $egreso = Egreso::find($id);
+    public function show(
+        string $id
+    ): JsonResponse {
+        $egreso = $this->egresoService
+            ->obtenerPorId($id);
 
         if (!$egreso) {
             return response()->json([
@@ -64,8 +48,9 @@ class EgresoController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
-    {
+    public function store(
+        Request $request
+    ): JsonResponse {
         $datos = $request->validate([
             'fecha' => [
                 'required',
@@ -83,24 +68,9 @@ class EgresoController extends Controller
             ],
         ]);
 
-        $egreso = Egreso::create([
-            'fecha' => $datos['fecha'],
-            'concepto' => $datos['concepto'],
-            'monto' => $datos['monto'],
-        ]);
-
-        $user = $request->user();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'crear',
-            "Registraste un egreso de $" . number_format(
-                (float) $egreso->monto,
-                2,
-                '.',
-                ''
-            ) . " por {$egreso->concepto}."
+        $egreso = $this->egresoService->crear(
+            $datos,
+            $request->user()
         );
 
         return response()->json([
@@ -113,14 +83,6 @@ class EgresoController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $egreso = Egreso::find($id);
-
-        if (!$egreso) {
-            return response()->json([
-                'message' => 'Egreso no encontrado.',
-            ], 404);
-        }
-
         $datos = $request->validate([
             'fecha' => [
                 'sometimes',
@@ -141,21 +103,17 @@ class EgresoController extends Controller
             ],
         ]);
 
-        $egreso->update($datos);
-
-        $user = $request->user();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'actualizar',
-            "Actualizaste un egreso de $" . number_format(
-                (float) $egreso->monto,
-                2,
-                '.',
-                ''
-            ) . " por {$egreso->concepto}."
+        $egreso = $this->egresoService->actualizar(
+            $id,
+            $datos,
+            $request->user()
         );
+
+        if (!$egreso) {
+            return response()->json([
+                'message' => 'Egreso no encontrado.',
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Egreso actualizado correctamente.',
@@ -167,40 +125,25 @@ class EgresoController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $egreso = Egreso::find($id);
+        $eliminado = $this->egresoService->eliminar(
+            $id,
+            $request->user()
+        );
 
-        if (!$egreso) {
+        if (!$eliminado) {
             return response()->json([
                 'message' => 'Egreso no encontrado.',
             ], 404);
         }
-
-        $monto = $egreso->monto;
-        $concepto = $egreso->concepto;
-
-        $egreso->delete();
-
-        $user = $request->user();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'egresos',
-            'eliminar',
-            "Eliminaste un egreso de $" . number_format(
-                (float) $monto,
-                2,
-                '.',
-                ''
-            ) . " por {$concepto}."
-        );
 
         return response()->json([
             'message' => 'Egreso eliminado correctamente.',
         ]);
     }
 
-    public function resumen(Request $request): JsonResponse
-    {
+    public function resumen(
+        Request $request
+    ): JsonResponse {
         $datos = $request->validate([
             'periodo' => [
                 'required',
@@ -224,50 +167,13 @@ class EgresoController extends Controller
             ],
         ]);
 
-        $query = Egreso::query();
-
-        if ($datos['periodo'] === 'dia') {
-            $query->whereDate(
-                'fecha',
-                $datos['fecha']
-            );
-        }
-
-        if ($datos['periodo'] === 'semana') {
-            $fecha = Carbon::parse($datos['fecha']);
-
-            $query->whereBetween('fecha', [
-                $fecha->copy()->startOfWeek(),
-                $fecha->copy()->endOfWeek(),
-            ]);
-        }
-
-        if ($datos['periodo'] === 'mes') {
-            $query->whereMonth(
-                'fecha',
-                $datos['mes']
-            )
-                ->whereYear(
-                    'fecha',
-                    $datos['anio']
-                );
-        }
-
-        if ($datos['periodo'] === 'anio') {
-            $query->whereYear(
-                'fecha',
-                $datos['anio']
-            );
-        }
+        $total = $this->egresoService->resumen(
+            $datos
+        );
 
         return response()->json([
             'periodo' => $datos['periodo'],
-            'total_egresos' => number_format(
-                (float) $query->sum('monto'),
-                2,
-                '.',
-                ''
-            ),
+            'total_egresos' => $total,
         ]);
     }
 }

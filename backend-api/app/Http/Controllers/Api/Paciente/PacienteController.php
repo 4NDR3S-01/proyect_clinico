@@ -5,17 +5,20 @@ namespace App\Http\Controllers\Api\Paciente;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Paciente\StorePacienteRequest;
 use App\Http\Requests\Paciente\UpdatePacienteRequest;
-use App\Models\Paciente;
-use App\Services\AuditoriaService;
+use App\Services\PacienteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class PacienteController extends Controller
 {
+    public function __construct(
+        private PacienteService $pacienteService
+    ) {
+    }
+
     public function index(): JsonResponse
     {
-        $pacientes = Paciente::orderBy('created_at', 'desc')->get();
+        $pacientes = $this->pacienteService->listar();
 
         return response()->json([
             'data' => $pacientes,
@@ -24,46 +27,19 @@ class PacienteController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $paciente = Paciente::findOrFail($id);
+        $paciente = $this->pacienteService->obtenerPorId($id);
 
         return response()->json([
             'data' => $paciente,
         ]);
     }
 
-    public function store(StorePacienteRequest $request): JsonResponse
-    {
-        $numero = DB::scalar(
-            "SELECT nextval('codigo_paciente_seq')"
-        );
-
-        $codigoPaciente = str_pad(
-            (string) $numero,
-            3,
-            '0',
-            STR_PAD_LEFT
-        );
-
-        $paciente = Paciente::create([
-            'codigo_paciente' => $codigoPaciente,
-            'nombres' => $request->nombres,
-            'cedula' => $request->cedula,
-            'telefono' => $request->telefono,
-            'direccion' => $request->direccion,
-            'fecha_nacimiento' => $request->fecha_nacimiento,
-        ]);
-
-        $user = $request->user();
-
-        $detalle = $user->role === 'doctora'
-            ? "Registraste al paciente {$paciente->codigo_paciente}."
-            : "Asistente registró al paciente {$paciente->codigo_paciente}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'pacientes',
-            'crear',
-            $detalle
+    public function store(
+        StorePacienteRequest $request
+    ): JsonResponse {
+        $paciente = $this->pacienteService->crear(
+            $request->validated(),
+            $request->user()
         );
 
         return response()->json([
@@ -76,23 +52,10 @@ class PacienteController extends Controller
         UpdatePacienteRequest $request,
         string $id
     ): JsonResponse {
-        $paciente = Paciente::findOrFail($id);
-
-        $paciente->update($request->validated());
-
-        $paciente = $paciente->fresh();
-
-        $user = $request->user();
-
-        $detalle = $user->role === 'doctora'
-            ? "Actualizaste los datos del paciente {$paciente->codigo_paciente}."
-            : "Asistente actualizó los datos del paciente {$paciente->codigo_paciente}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'pacientes',
-            'actualizar',
-            $detalle
+        $paciente = $this->pacienteService->actualizar(
+            $id,
+            $request->validated(),
+            $request->user()
         );
 
         return response()->json([
@@ -101,8 +64,9 @@ class PacienteController extends Controller
         ]);
     }
 
-    public function miPerfil(Request $request): JsonResponse
-    {
+    public function miPerfil(
+        Request $request
+    ): JsonResponse {
         $user = $request->user();
 
         if (!$user->paciente_id) {
@@ -111,7 +75,9 @@ class PacienteController extends Controller
             ], 404);
         }
 
-        $paciente = Paciente::find($user->paciente_id);
+        $paciente = $this->pacienteService->obtenerPerfil(
+            $user
+        );
 
         if (!$paciente) {
             return response()->json([
@@ -131,4 +97,3 @@ class PacienteController extends Controller
         ]);
     }
 }
-

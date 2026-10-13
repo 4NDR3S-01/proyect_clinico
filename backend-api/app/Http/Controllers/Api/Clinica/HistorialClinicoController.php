@@ -3,30 +3,34 @@
 namespace App\Http\Controllers\Api\Clinica;
 
 use App\Http\Controllers\Controller;
-use App\Models\HistorialClinico;
-use App\Models\Paciente;
-use App\Services\AuditoriaService;
+use App\Services\HistorialClinicoService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-
 class HistorialClinicoController extends Controller
 {
+    public function __construct(
+        private HistorialClinicoService $historialClinicoService
+    ) {
+    }
+
     public function index(): JsonResponse
     {
-        $historiales = HistorialClinico::all();
+        $historiales = $this
+            ->historialClinicoService
+            ->listar();
 
         return response()->json([
             'data' => $historiales,
         ]);
     }
 
-    public function porPaciente($pacienteId): JsonResponse
-    {
-        $historial = HistorialClinico::where(
-            'paciente_id',
-            $pacienteId
-        )->first();
+    public function porPaciente(
+        string $pacienteId
+    ): JsonResponse {
+        $historial = $this
+            ->historialClinicoService
+            ->obtenerPorPaciente($pacienteId);
 
         if (!$historial) {
             return response()->json([
@@ -39,9 +43,12 @@ class HistorialClinicoController extends Controller
         ]);
     }
 
-    public function show($id): JsonResponse
-    {
-        $historial = HistorialClinico::find($id);
+    public function show(
+        string $id
+    ): JsonResponse {
+        $historial = $this
+            ->historialClinicoService
+            ->obtenerPorId($id);
 
         if (!$historial) {
             return response()->json([
@@ -54,8 +61,9 @@ class HistorialClinicoController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
-    {
+    public function store(
+        Request $request
+    ): JsonResponse {
         $datos = $request->validate([
             'paciente_id' => [
                 'required',
@@ -87,20 +95,12 @@ class HistorialClinicoController extends Controller
             ],
         ]);
 
-        $historial = HistorialClinico::create($datos);
-
-        $paciente = Paciente::findOrFail(
-            $historial->paciente_id
-        );
-
-        $user = $request->user();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'historial_clinico',
-            'crear',
-            "Registraste el historial clínico del paciente {$paciente->codigo_paciente}."
-        );
+        $historial = $this
+            ->historialClinicoService
+            ->crear(
+                $datos,
+                $request->user()
+            );
 
         return response()->json([
             'message' => 'Historial clínico registrado correctamente.',
@@ -110,16 +110,8 @@ class HistorialClinicoController extends Controller
 
     public function update(
         Request $request,
-        $id
+        string $id
     ): JsonResponse {
-        $historial = HistorialClinico::find($id);
-
-        if (!$historial) {
-            return response()->json([
-                'message' => 'Historial clínico no encontrado.',
-            ], 404);
-        }
-
         $datos = $request->validate([
             'sexo' => [
                 'sometimes',
@@ -150,41 +142,40 @@ class HistorialClinicoController extends Controller
             ],
         ]);
 
-        $historial->update($datos);
+        $historial = $this
+            ->historialClinicoService
+            ->actualizar(
+                $id,
+                $datos,
+                $request->user()
+            );
 
-        $paciente = Paciente::findOrFail(
-            $historial->paciente_id
-        );
-
-        $user = $request->user();
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'historial_clinico',
-            'actualizar',
-            "Actualizaste el historial clínico del paciente {$paciente->codigo_paciente}."
-        );
+        if (!$historial) {
+            return response()->json([
+                'message' => 'Historial clínico no encontrado.',
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Historial clínico actualizado correctamente.',
-            'data' => $historial->fresh(),
+            'data' => $historial,
         ]);
     }
 
-    public function miHistorial(Request $request): JsonResponse
-    {
-        $pacienteId = $request->user()->paciente_id;
+    public function miHistorial(
+        Request $request
+    ): JsonResponse {
+        $user = $request->user();
 
-        if (!$pacienteId) {
+        if (!$user->paciente_id) {
             return response()->json([
                 'message' => 'La cuenta no está vinculada a un paciente.',
             ], 404);
         }
 
-        $historial = HistorialClinico::where(
-            'paciente_id',
-            $pacienteId
-        )->first();
+        $historial = $this
+            ->historialClinicoService
+            ->obtenerMiHistorial($user);
 
         if (!$historial) {
             return response()->json([

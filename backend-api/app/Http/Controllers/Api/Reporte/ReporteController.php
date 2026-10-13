@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Api\Reporte;
 
 use App\Http\Controllers\Controller;
-use App\Models\Actividad;
-use App\Models\Egreso;
-use Carbon\Carbon;
+use App\Services\ReporteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ReporteController extends Controller
 {
+    public function __construct(
+        private ReporteService $reporteService
+    ) {
+    }
+
     public function clinicos(): JsonResponse
     {
         return response()->json([
@@ -46,8 +49,9 @@ class ReporteController extends Controller
         ]);
     }
 
-    public function resumenCaja(Request $request): JsonResponse
-    {
+    public function resumenCaja(
+        Request $request
+    ): JsonResponse {
         $datos = $request->validate([
             'periodo' => [
                 'required',
@@ -71,84 +75,12 @@ class ReporteController extends Controller
             ],
         ]);
 
-        $ingresosQuery = Actividad::query();
-        $egresosQuery = Egreso::query();
+        $resultado = $this
+            ->reporteService
+            ->resumenCaja($datos);
 
-        if ($datos['periodo'] === 'dia') {
-            $ingresosQuery->whereDate(
-                'fecha',
-                $datos['fecha']
-            );
-
-            $egresosQuery->whereDate(
-                'fecha',
-                $datos['fecha']
-            );
-        }
-
-        if ($datos['periodo'] === 'semana') {
-            $fecha = Carbon::parse($datos['fecha']);
-
-            $inicio = $fecha->copy()->startOfWeek();
-            $fin = $fecha->copy()->endOfWeek();
-
-            $ingresosQuery->whereBetween(
-                'fecha',
-                [$inicio, $fin]
-            );
-
-            $egresosQuery->whereBetween(
-                'fecha',
-                [$inicio, $fin]
-            );
-        }
-
-        if ($datos['periodo'] === 'mes') {
-            $ingresosQuery
-                ->whereMonth('fecha', $datos['mes'])
-                ->whereYear('fecha', $datos['anio']);
-
-            $egresosQuery
-                ->whereMonth('fecha', $datos['mes'])
-                ->whereYear('fecha', $datos['anio']);
-        }
-
-        if ($datos['periodo'] === 'anio') {
-            $ingresosQuery->whereYear(
-                'fecha',
-                $datos['anio']
-            );
-
-            $egresosQuery->whereYear(
-                'fecha',
-                $datos['anio']
-            );
-        }
-
-        $ingresos = (float) $ingresosQuery->sum('precio');
-        $egresos = (float) $egresosQuery->sum('monto');
-        $saldo = $ingresos - $egresos;
-
-        return response()->json([
-            'periodo' => $datos['periodo'],
-            'ingresos' => number_format(
-                $ingresos,
-                2,
-                '.',
-                ''
-            ),
-            'egresos' => number_format(
-                $egresos,
-                2,
-                '.',
-                ''
-            ),
-            'saldo' => number_format(
-                $saldo,
-                2,
-                '.',
-                ''
-            ),
-        ]);
+        return response()->json(
+            $resultado
+        );
     }
 }

@@ -3,36 +3,39 @@
 namespace App\Http\Controllers\Api\Clinica;
 
 use App\Http\Controllers\Controller;
-use App\Models\Odontograma;
-use App\Models\Paciente;
-use App\Services\AuditoriaService;
+use App\Services\OdontogramaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class OdontogramaController extends Controller
 {
-    public function porPaciente(string $pacienteId): JsonResponse
-    {
-        $paciente = Paciente::find($pacienteId);
+    public function __construct(
+        private OdontogramaService $odontogramaService
+    ) {
+    }
 
-        if (!$paciente) {
+    public function porPaciente(
+        string $pacienteId
+    ): JsonResponse {
+        $resultado = $this
+            ->odontogramaService
+            ->obtenerPorPaciente($pacienteId);
+
+        if (!$resultado['paciente']) {
             return response()->json([
                 'message' => 'Paciente no encontrado.',
             ], 404);
         }
 
-        $odontograma = Odontograma::where(
-            'paciente_id',
-            $pacienteId
-        )->first();
-
         return response()->json([
             'paciente' => [
-                'id' => $paciente->id,
-                'codigo_paciente' => $paciente->codigo_paciente,
-                'nombres' => $paciente->nombres,
+                'id' => $resultado['paciente']->id,
+                'codigo_paciente' =>
+                    $resultado['paciente']->codigo_paciente,
+                'nombres' =>
+                    $resultado['paciente']->nombres,
             ],
-            'odontograma' => $odontograma,
+            'odontograma' => $resultado['odontograma'],
         ]);
     }
 
@@ -40,14 +43,6 @@ class OdontogramaController extends Controller
         Request $request,
         string $pacienteId
     ): JsonResponse {
-        $paciente = Paciente::find($pacienteId);
-
-        if (!$paciente) {
-            return response()->json([
-                'message' => 'Paciente no encontrado.',
-            ], 404);
-        }
-
         $datos = $request->validate([
             'datos' => [
                 'required',
@@ -55,36 +50,18 @@ class OdontogramaController extends Controller
             ],
         ]);
 
-        $odontogramaExistente = Odontograma::where(
-            'paciente_id',
-            $pacienteId
-        )->exists();
-
-        $odontograma = Odontograma::updateOrCreate(
-            [
-                'paciente_id' => $pacienteId,
-            ],
-            [
-                'datos' => $datos['datos'],
-            ]
-        );
-
-        $user = $request->user();
-
-        if ($odontogramaExistente) {
-            AuditoriaService::registrarAccion(
-                $user,
-                'odontograma',
-                'actualizar',
-                "Actualizaste el odontograma del paciente {$paciente->codigo_paciente}."
+        $odontograma = $this
+            ->odontogramaService
+            ->guardar(
+                $pacienteId,
+                $datos,
+                $request->user()
             );
-        } else {
-            AuditoriaService::registrarAccion(
-                $user,
-                'odontograma',
-                'crear',
-                "Registraste el odontograma del paciente {$paciente->codigo_paciente}."
-            );
+
+        if (!$odontograma) {
+            return response()->json([
+                'message' => 'Paciente no encontrado.',
+            ], 404);
         }
 
         return response()->json([
@@ -97,33 +74,24 @@ class OdontogramaController extends Controller
         Request $request,
         string $pacienteId
     ): JsonResponse {
-        $paciente = Paciente::find($pacienteId);
+        $resultado = $this
+            ->odontogramaService
+            ->eliminar(
+                $pacienteId,
+                $request->user()
+            );
 
-        if (!$paciente) {
+        if ($resultado === 'paciente_no_encontrado') {
             return response()->json([
                 'message' => 'Paciente no encontrado.',
             ], 404);
         }
 
-        $odontograma = Odontograma::where(
-            'paciente_id',
-            $pacienteId
-        )->first();
-
-        if (!$odontograma) {
+        if ($resultado === 'odontograma_no_encontrado') {
             return response()->json([
                 'message' => 'El paciente no tiene un odontograma registrado.',
             ], 404);
         }
-
-        $odontograma->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'odontograma',
-            'eliminar',
-            "Eliminaste el odontograma del paciente {$paciente->codigo_paciente}."
-        );
 
         return response()->json([
             'message' => 'Odontograma eliminado correctamente.',

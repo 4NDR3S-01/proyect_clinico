@@ -3,55 +3,61 @@
 namespace App\Http\Controllers\Api\Configuracion;
 
 use App\Http\Controllers\Controller;
-use App\Models\AccionRegistrada;
-use App\Models\SesionRegistrada;
+use App\Services\AuditoriaService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AuditoriaController extends Controller
 {
-    public function acciones(Request $request): JsonResponse
-    {
-        $query = AccionRegistrada::query()
-            ->where('visible', true);
+    public function __construct(
+        private AuditoriaService $auditoriaService
+    ) {
+    }
 
-        if ($request->filled('fecha')) {
-            $query->whereDate('created_at', $request->fecha);
-        }
-
-        $acciones = $query
-            ->orderByDesc('created_at')
-            ->get();
+    public function acciones(
+        Request $request
+    ): JsonResponse {
+        $acciones = $this
+            ->auditoriaService
+            ->listarAcciones(
+                $request->only([
+                    'fecha',
+                ])
+            );
 
         return response()->json([
             'acciones' => $acciones,
         ]);
     }
 
-    public function sesiones(Request $request): JsonResponse
-    {
-        $query = SesionRegistrada::query();
-
-        if ($request->filled('fecha')) {
-            $query->whereDate('created_at', $request->fecha);
-        }
-
-        $sesiones = $query
-            ->orderByDesc('created_at')
-            ->get();
+    public function sesiones(
+        Request $request
+    ): JsonResponse {
+        $sesiones = $this
+            ->auditoriaService
+            ->listarSesiones(
+                $request->only([
+                    'fecha',
+                ])
+            );
 
         return response()->json([
             'sesiones' => $sesiones,
         ]);
     }
 
-    public function ocultarAccion(string $id): JsonResponse
-    {
-        $accion = AccionRegistrada::findOrFail($id);
+    public function ocultarAccion(
+        string $id
+    ): JsonResponse {
+        $ocultada = $this
+            ->auditoriaService
+            ->ocultarAccion($id);
 
-        $accion->update([
-            'visible' => false,
-        ]);
+        if (!$ocultada) {
+            return response()->json([
+                'message' => 'Acción no encontrada.',
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Acción eliminada de la vista correctamente.',

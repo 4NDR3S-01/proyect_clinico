@@ -36,4 +36,55 @@ class AuditoriaService
             'accion' => $accion,
         ]);
     }
+
+    public function listarAcciones(
+        array $filtros
+    ) {
+        $query = AccionRegistrada::query()
+            ->where('visible', true);
+
+        if (!empty($filtros['fecha'])) {
+            $query->whereDate(
+                'created_at',
+                $filtros['fecha']
+            );
+        }
+
+        return $query
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    public function listarSesiones(
+        array $filtros
+    ) {
+        $query = SesionRegistrada::query();
+
+        if (!empty($filtros['fecha'])) {
+            $query->whereDate(
+                'created_at',
+                $filtros['fecha']
+            );
+        }
+
+        return $query
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    public function ocultarAccion(
+        string $id
+    ): bool {
+        $accion = AccionRegistrada::find($id);
+
+        if (!$accion) {
+            return false;
+        }
+
+        $accion->update([
+            'visible' => false,
+        ]);
+
+        return true;
+    }
 }

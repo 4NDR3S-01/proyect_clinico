@@ -3,54 +3,28 @@
 namespace App\Http\Controllers\Api\Actividad;
 
 use App\Http\Controllers\Controller;
-use App\Models\Actividad;
-use App\Models\Paciente;
-use App\Services\AuditoriaService;
-use Carbon\Carbon;
+use App\Services\ActividadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ActividadController extends Controller
 {
+    public function __construct(
+        private ActividadService $actividadService
+    ) {
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $query = Actividad::query()
-            ->with('paciente');
-
-        if ($request->filled('fecha')) {
-            $query->whereDate('fecha', $request->fecha);
-        }
-
-        if ($request->filled('semana')) {
-            $fecha = Carbon::parse($request->semana);
-
-            $query->whereBetween('fecha', [
-                $fecha->copy()->startOfWeek(),
-                $fecha->copy()->endOfWeek(),
-            ]);
-        }
-
-        if ($request->filled('mes') && $request->filled('anio')) {
-            $query->whereMonth('fecha', $request->mes)
-                ->whereYear('fecha', $request->anio);
-        }
-
-        if ($request->filled('anio') && !$request->filled('mes')) {
-            $query->whereYear('fecha', $request->anio);
-        }
-
-        if ($request->filled('codigo_paciente')) {
-            $query->whereHas('paciente', function ($q) use ($request) {
-                $q->where(
-                    'codigo_paciente',
-                    $request->codigo_paciente
-                );
-            });
-        }
-
-        $actividades = $query
-            ->orderBy('fecha', 'desc')
-            ->get();
+        $actividades = $this->actividadService->listar(
+            $request->only([
+                'fecha',
+                'semana',
+                'mes',
+                'anio',
+                'codigo_paciente',
+            ])
+        );
 
         return response()->json([
             'data' => $actividades,
@@ -59,8 +33,7 @@ class ActividadController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $actividad = Actividad::with('paciente')
-            ->find($id);
+        $actividad = $this->actividadService->obtenerPorId($id);
 
         if (!$actividad) {
             return response()->json([
@@ -97,37 +70,17 @@ class ActividadController extends Controller
             ],
         ]);
 
-        $paciente = Paciente::where(
-            'codigo_paciente',
-            $datos['codigo_paciente']
-        )->firstOrFail();
-
-        $actividad = Actividad::create([
-            'paciente_id' => $paciente->id,
-            'fecha' => $datos['fecha'],
-            'actividad' => $datos['actividad'],
-            'precio' => $datos['precio'],
-        ]);
-
-        $user = $request->user();
-
-        $detalle = $user->role === 'doctora'
-            ? "Registraste una actividad para el paciente {$paciente->codigo_paciente}."
-            : "Asistente registró una actividad para el paciente {$paciente->codigo_paciente}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'crear',
-            $detalle
+        $actividad = $this->actividadService->crear(
+            $datos,
+            $request->user()
         );
 
         return response()->json([
             'message' => 'Actividad registrada correctamente.',
             'data' => [
                 'id' => $actividad->id,
-                'codigo_paciente' => $paciente->codigo_paciente,
-                'nombres' => $paciente->nombres,
+                'codigo_paciente' => $actividad->paciente->codigo_paciente,
+                'nombres' => $actividad->paciente->nombres,
                 'fecha' => $actividad->fecha,
                 'actividad' => $actividad->actividad,
                 'precio' => $actividad->precio,
@@ -139,14 +92,6 @@ class ActividadController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $actividad = Actividad::find($id);
-
-        if (!$actividad) {
-            return response()->json([
-                'message' => 'Actividad no encontrada.',
-            ], 404);
-        }
-
         $datos = $request->validate([
             'codigo_paciente' => [
                 'sometimes',
@@ -173,43 +118,17 @@ class ActividadController extends Controller
             ],
         ]);
 
-        if (isset($datos['codigo_paciente'])) {
-            $paciente = Paciente::where(
-                'codigo_paciente',
-                $datos['codigo_paciente']
-            )->firstOrFail();
-
-            $actividad->paciente_id = $paciente->id;
-        }
-
-        if (isset($datos['fecha'])) {
-            $actividad->fecha = $datos['fecha'];
-        }
-
-        if (isset($datos['actividad'])) {
-            $actividad->actividad = $datos['actividad'];
-        }
-
-        if (isset($datos['precio'])) {
-            $actividad->precio = $datos['precio'];
-        }
-
-        $actividad->save();
-
-        $actividad->load('paciente');
-
-        $user = $request->user();
-
-        $detalle = $user->role === 'doctora'
-            ? "Actualizaste una actividad del paciente {$actividad->paciente->codigo_paciente}."
-            : "Asistente actualizó una actividad del paciente {$actividad->paciente->codigo_paciente}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'actualizar',
-            $detalle
+        $actividad = $this->actividadService->actualizar(
+            $id,
+            $datos,
+            $request->user()
         );
+
+        if (!$actividad) {
+            return response()->json([
+                'message' => 'Actividad no encontrada.',
+            ], 404);
+        }
 
         return response()->json([
             'message' => 'Actividad actualizada correctamente.',
@@ -221,31 +140,16 @@ class ActividadController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $actividad = Actividad::with('paciente')
-            ->find($id);
+        $eliminada = $this->actividadService->eliminar(
+            $id,
+            $request->user()
+        );
 
-        if (!$actividad) {
+        if (!$eliminada) {
             return response()->json([
                 'message' => 'Actividad no encontrada.',
             ], 404);
         }
-
-        $codigoPaciente = $actividad->paciente->codigo_paciente;
-
-        $actividad->delete();
-
-        $user = $request->user();
-
-        $detalle = $user->role === 'doctora'
-            ? "Eliminaste una actividad del paciente {$codigoPaciente}."
-            : "Asistente eliminó una actividad del paciente {$codigoPaciente}.";
-
-        AuditoriaService::registrarAccion(
-            $user,
-            'actividades',
-            'eliminar',
-            $detalle
-        );
 
         return response()->json([
             'message' => 'Actividad eliminada correctamente.',
@@ -255,10 +159,8 @@ class ActividadController extends Controller
     public function buscarPacientePorCodigo(
         string $codigo
     ): JsonResponse {
-        $paciente = Paciente::where(
-            'codigo_paciente',
-            $codigo
-        )->first();
+        $paciente = $this->actividadService
+            ->buscarPacientePorCodigo($codigo);
 
         if (!$paciente) {
             return response()->json([
@@ -299,40 +201,13 @@ class ActividadController extends Controller
             ],
         ]);
 
-        $query = Actividad::query();
-
-        if ($datos['periodo'] === 'dia') {
-            $fecha = Carbon::parse($datos['fecha']);
-
-            $query->whereDate('fecha', $fecha);
-        }
-
-        if ($datos['periodo'] === 'semana') {
-            $fecha = Carbon::parse($datos['fecha']);
-
-            $query->whereBetween('fecha', [
-                $fecha->copy()->startOfWeek(),
-                $fecha->copy()->endOfWeek(),
-            ]);
-        }
-
-        if ($datos['periodo'] === 'mes') {
-            $query->whereMonth('fecha', $datos['mes'])
-                ->whereYear('fecha', $datos['anio']);
-        }
-
-        if ($datos['periodo'] === 'anio') {
-            $query->whereYear('fecha', $datos['anio']);
-        }
+        $total = $this->actividadService->resumen(
+            $datos
+        );
 
         return response()->json([
             'periodo' => $datos['periodo'],
-            'total' => number_format(
-                (float) $query->sum('precio'),
-                2,
-                '.',
-                ''
-            ),
+            'total' => $total,
         ]);
     }
 }

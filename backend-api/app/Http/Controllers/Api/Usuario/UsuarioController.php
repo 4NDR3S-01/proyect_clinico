@@ -3,38 +3,34 @@
 namespace App\Http\Controllers\Api\Usuario;
 
 use App\Http\Controllers\Controller;
-use App\Models\Paciente;
-use App\Models\User;
-use App\Services\AuditoriaService;
+use App\Services\UsuarioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class UsuarioController extends Controller
 {
+    public function __construct(
+        private UsuarioService $usuarioService
+    ) {
+    }
+
     public function index(): JsonResponse
     {
-        $usuarios = User::query()
-            ->select([
-                'id',
-                'name',
-                'email',
-                'username',
-                'role',
-                'paciente_id',
-                'activo',
-                'created_at',
-            ])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $usuarios = $this
+            ->usuarioService
+            ->listar();
 
         return response()->json([
             'data' => $usuarios,
         ]);
     }
 
-    public function show($id): JsonResponse
-    {
-        $usuario = User::find($id);
+    public function show(
+        string $id
+    ): JsonResponse {
+        $usuario = $this
+            ->usuarioService
+            ->obtenerPorId($id);
 
         if (!$usuario) {
             return response()->json([
@@ -56,31 +52,9 @@ class UsuarioController extends Controller
         ]);
     }
 
-    public function store(): JsonResponse
-    {
-        return response()->json([
-            'message' => 'Crear usuario'
-        ]);
-    }
-
-    public function update($id): JsonResponse
-    {
-        return response()->json([
-            'message' => 'Actualizar usuario',
-            'id' => $id
-        ]);
-    }
-
-    public function destroy($id): JsonResponse
-    {
-        return response()->json([
-            'message' => 'Eliminar usuario',
-            'id' => $id
-        ]);
-    }
-
-    public function crearAsistente(Request $request): JsonResponse
-    {
+    public function crearAsistente(
+        Request $request
+    ): JsonResponse {
         $datos = $request->validate([
             'name' => [
                 'required',
@@ -106,33 +80,20 @@ class UsuarioController extends Controller
             ],
         ]);
 
-        $asistenteExistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $resultado = $this
+            ->usuarioService
+            ->crearAsistente(
+                $datos,
+                $request->user()
+            );
 
-        if ($asistenteExistente) {
+        if ($resultado['estado'] === 'ya_existe') {
             return response()->json([
                 'message' => 'Ya existe una cuenta de asistente registrada.',
             ], 409);
         }
 
-        $asistente = User::create([
-            'name' => $datos['name'],
-            'email' => $datos['email'],
-            'username' => $datos['username'],
-            'password' => $datos['password'],
-            'role' => 'asistente',
-            'paciente_id' => null,
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'crear_asistente',
-            "Creaste la cuenta del asistente {$asistente->name}."
-        );
+        $asistente = $resultado['asistente'];
 
         return response()->json([
             'message' => 'Cuenta de asistente creada correctamente.',
@@ -149,10 +110,9 @@ class UsuarioController extends Controller
 
     public function verAsistente(): JsonResponse
     {
-        $asistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $asistente = $this
+            ->usuarioService
+            ->obtenerAsistente();
 
         if (!$asistente) {
             return response()->json([
@@ -175,35 +135,25 @@ class UsuarioController extends Controller
     public function desactivarAsistente(
         Request $request
     ): JsonResponse {
-        $asistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $resultado = $this
+            ->usuarioService
+            ->desactivarAsistente(
+                $request->user()
+            );
 
-        if (!$asistente) {
+        if ($resultado['estado'] === 'no_existe') {
             return response()->json([
                 'message' => 'No existe una cuenta de asistente.',
             ], 404);
         }
 
-        if (!$asistente->activo) {
+        if ($resultado['estado'] === 'ya_desactivado') {
             return response()->json([
                 'message' => 'La cuenta de asistente ya está desactivada.',
             ], 409);
         }
 
-        $asistente->update([
-            'activo' => false,
-        ]);
-
-        $asistente->tokens()->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'desactivar_asistente',
-            "Desactivaste la cuenta del asistente {$asistente->name}."
-        );
+        $asistente = $resultado['asistente'];
 
         return response()->json([
             'message' => 'Cuenta de asistente desactivada correctamente.',
@@ -220,33 +170,25 @@ class UsuarioController extends Controller
     public function activarAsistente(
         Request $request
     ): JsonResponse {
-        $asistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $resultado = $this
+            ->usuarioService
+            ->activarAsistente(
+                $request->user()
+            );
 
-        if (!$asistente) {
+        if ($resultado['estado'] === 'no_existe') {
             return response()->json([
                 'message' => 'No existe una cuenta de asistente.',
             ], 404);
         }
 
-        if ($asistente->activo) {
+        if ($resultado['estado'] === 'ya_activo') {
             return response()->json([
                 'message' => 'La cuenta de asistente ya está activa.',
             ], 409);
         }
 
-        $asistente->update([
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'activar_asistente',
-            "Activaste la cuenta del asistente {$asistente->name}."
-        );
+        $asistente = $resultado['asistente'];
 
         return response()->json([
             'message' => 'Cuenta de asistente activada correctamente.',
@@ -272,29 +214,18 @@ class UsuarioController extends Controller
             ],
         ]);
 
-        $asistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $resultado = $this
+            ->usuarioService
+            ->cambiarPasswordAsistente(
+                $datos['password'],
+                $request->user()
+            );
 
-        if (!$asistente) {
+        if ($resultado === 'no_existe') {
             return response()->json([
                 'message' => 'No existe una cuenta de asistente.',
             ], 404);
         }
-
-        $asistente->update([
-            'password' => $datos['password'],
-        ]);
-
-        $asistente->tokens()->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'cambiar_password_asistente',
-            "Cambiaste la contraseña del asistente {$asistente->name}."
-        );
 
         return response()->json([
             'message' => 'Contraseña de la asistente actualizada correctamente.',
@@ -304,29 +235,17 @@ class UsuarioController extends Controller
     public function eliminarAsistente(
         Request $request
     ): JsonResponse {
-        $asistente = User::where(
-            'role',
-            'asistente'
-        )->first();
+        $resultado = $this
+            ->usuarioService
+            ->eliminarAsistente(
+                $request->user()
+            );
 
-        if (!$asistente) {
+        if ($resultado === 'no_existe') {
             return response()->json([
                 'message' => 'No existe una cuenta de asistente.',
             ], 404);
         }
-
-        $nombreAsistente = $asistente->name;
-
-        $asistente->tokens()->delete();
-
-        $asistente->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'eliminar_asistente',
-            "Eliminaste la cuenta del asistente {$nombreAsistente}."
-        );
 
         return response()->json([
             'message' => 'Cuenta de asistente eliminada correctamente.',
@@ -337,38 +256,32 @@ class UsuarioController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $usuario = User::find($id);
+        $resultado = $this
+            ->usuarioService
+            ->desactivarUsuario(
+                $id,
+                $request->user()
+            );
 
-        if (!$usuario) {
+        if ($resultado['estado'] === 'no_encontrado') {
             return response()->json([
                 'message' => 'Usuario no encontrado.',
             ], 404);
         }
 
-        if ($usuario->id === $request->user()->id) {
+        if ($resultado['estado'] === 'propia_cuenta') {
             return response()->json([
                 'message' => 'No puedes desactivar tu propia cuenta.',
             ], 409);
         }
 
-        if (!$usuario->activo) {
+        if ($resultado['estado'] === 'ya_desactivado') {
             return response()->json([
                 'message' => 'La cuenta ya se encuentra desactivada.',
             ], 409);
         }
 
-        $usuario->update([
-            'activo' => false,
-        ]);
-
-        $usuario->tokens()->delete();
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'desactivar_usuario',
-            "Desactivaste la cuenta de {$usuario->name}."
-        );
+        $usuario = $resultado['usuario'];
 
         return response()->json([
             'message' => 'Cuenta desactivada correctamente.',
@@ -387,39 +300,32 @@ class UsuarioController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $usuario = User::find($id);
+        $resultado = $this
+            ->usuarioService
+            ->activarUsuario(
+                $id,
+                $request->user()
+            );
 
-        if (!$usuario) {
+        if ($resultado['estado'] === 'no_encontrado') {
             return response()->json([
                 'message' => 'Usuario no encontrado.',
             ], 404);
         }
 
-        if ($usuario->activo) {
+        if ($resultado['estado'] === 'ya_activo') {
             return response()->json([
                 'message' => 'La cuenta ya se encuentra activa.',
             ], 409);
         }
 
-        if (
-            $usuario->role === 'paciente' &&
-            !$usuario->paciente_id
-        ) {
+        if ($resultado['estado'] === 'paciente_sin_vinculo') {
             return response()->json([
                 'message' => 'La cuenta de paciente debe estar vinculada a un expediente antes de activarse.',
             ], 409);
         }
 
-        $usuario->update([
-            'activo' => true,
-        ]);
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'activar_usuario',
-            "Activaste la cuenta de {$usuario->name}."
-        );
+        $usuario = $resultado['usuario'];
 
         return response()->json([
             'message' => 'Cuenta activada correctamente.',
@@ -438,51 +344,32 @@ class UsuarioController extends Controller
         Request $request,
         string $id
     ): JsonResponse {
-        $usuario = User::find($id);
+        $resultado = $this
+            ->usuarioService
+            ->desvincularPaciente(
+                $id,
+                $request->user()
+            );
 
-        if (!$usuario) {
+        if ($resultado['estado'] === 'no_encontrado') {
             return response()->json([
                 'message' => 'Usuario no encontrado.',
             ], 404);
         }
 
-        if ($usuario->role !== 'paciente') {
+        if ($resultado['estado'] === 'no_es_paciente') {
             return response()->json([
                 'message' => 'Solo se pueden desvincular cuentas de pacientes.',
             ], 409);
         }
 
-        if (!$usuario->paciente_id) {
+        if ($resultado['estado'] === 'ya_desvinculado') {
             return response()->json([
                 'message' => 'La cuenta ya se encuentra desvinculada.',
             ], 409);
         }
 
-        $paciente = Paciente::find(
-            $usuario->paciente_id
-        );
-
-        $codigoPaciente = $paciente
-            ? $paciente->codigo_paciente
-            : null;
-
-        $usuario->tokens()->delete();
-
-        $usuario->update([
-            'paciente_id' => null,
-            'activo' => false,
-        ]);
-
-        $detalle = $codigoPaciente
-            ? "Desvinculaste la cuenta del paciente {$codigoPaciente}."
-            : "Desvinculaste la cuenta de {$usuario->name}.";
-
-        AuditoriaService::registrarAccion(
-            $request->user(),
-            'usuarios',
-            'desvincular_paciente',
-            $detalle
-        );
+        $usuario = $resultado['usuario'];
 
         return response()->json([
             'message' => 'Cuenta de paciente desvinculada correctamente.',
