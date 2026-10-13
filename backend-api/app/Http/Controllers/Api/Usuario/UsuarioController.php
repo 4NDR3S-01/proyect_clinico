@@ -20,9 +20,7 @@ class UsuarioController extends Controller
             ->usuarioService
             ->listar();
 
-        return response()->json([
-            'data' => $usuarios,
-        ]);
+        return response()->json($usuarios);
     }
 
     public function show(

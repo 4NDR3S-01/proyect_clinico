@@ -4,11 +4,12 @@ namespace App\Services;
 
 use App\Models\Paciente;
 use App\Models\User;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 class UsuarioService
 {
-    public function listar()
+    public function listar(): LengthAwarePaginator
     {
         return User::query()
             ->select([
@@ -22,7 +23,8 @@ class UsuarioService
                 'created_at',
             ])
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->orderBy('id', 'desc')
+            ->paginate(20);
     }
 
     public function obtenerPorId(

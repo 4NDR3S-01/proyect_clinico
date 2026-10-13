@@ -4,14 +4,16 @@ namespace App\Services;
 
 use App\Models\Paciente;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
 class PacienteService
 {
-    public function listar(): Collection
+    public function listar(): LengthAwarePaginator
     {
-        return Paciente::orderBy('created_at', 'desc')->get();
+        return Paciente::orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(20);
     }
 
     public function obtenerPorId(string $id): Paciente

@@ -20,9 +20,7 @@ class PacienteController extends Controller
     {
         $pacientes = $this->pacienteService->listar();
 
-        return response()->json([
-            'data' => $pacientes,
-        ]);
+        return response()->json($pacientes);
     }
 
     public function show(string $id): JsonResponse
