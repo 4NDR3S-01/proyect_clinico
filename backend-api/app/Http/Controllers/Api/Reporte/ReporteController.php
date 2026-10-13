@@ -16,37 +16,67 @@ class ReporteController extends Controller
 
     public function clinicos(): JsonResponse
     {
-        return response()->json([
-            'message' => 'Reporte clínico',
-        ]);
+        $resultado = $this
+            ->reporteService
+            ->clinicos();
+
+        return response()->json(
+            $resultado
+        );
     }
 
     public function economicos(): JsonResponse
     {
-        return response()->json([
-            'message' => 'Reporte económico',
-        ]);
+        $resultado = $this
+            ->reporteService
+            ->economicos();
+
+        return response()->json(
+            $resultado
+        );
     }
 
-    public function financieros(): JsonResponse
-    {
-        return response()->json([
-            'message' => 'Reporte financiero',
+    public function financieros(
+        Request $request
+    ): JsonResponse {
+        $datos = $request->validate([
+            'anio' => [
+                'required',
+                'integer',
+            ],
         ]);
+
+        $resultado = $this
+            ->reporteService
+            ->financieros(
+                $datos['anio']
+            );
+
+        return response()->json(
+            $resultado
+        );
     }
 
     public function ingresos(): JsonResponse
     {
-        return response()->json([
-            'message' => 'Estadísticas de ingresos',
-        ]);
+        $resultado = $this
+            ->reporteService
+            ->ingresos();
+
+        return response()->json(
+            $resultado
+        );
     }
 
     public function dashboard(): JsonResponse
     {
-        return response()->json([
-            'message' => 'Datos del dashboard',
-        ]);
+        $resultado = $this
+            ->reporteService
+            ->dashboard();
+
+        return response()->json(
+            $resultado
+        );
     }
 
     public function resumenCaja(

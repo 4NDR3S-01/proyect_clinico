@@ -46,9 +46,11 @@ Route::get('/user', function (Request $request) {
 // Autenticación
 
 Route::prefix('auth')->group(function () {
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login'])
+        ->middleware('throttle:auth-login');
 
-    Route::post('/register-paciente', [AuthController::class, 'registerPaciente']);
+    Route::post('/register-paciente', [AuthController::class, 'registerPaciente'])
+        ->middleware('throttle:auth-register');
 
     Route::post('/forgot-password', [PasswordController::class, 'forgotPassword']);
 
