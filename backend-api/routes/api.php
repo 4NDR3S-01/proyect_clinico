@@ -33,6 +33,9 @@ use App\Http\Controllers\Api\Reporte\EgresoController;
 
 use App\Http\Controllers\Api\Configuracion\AuditoriaController;
 
+use App\Http\Controllers\Api\Servicio\CategoriaServicioController;
+use App\Http\Controllers\Api\Servicio\ServicioConsultorioController;
+
 
 
 Route::get('/user', function (Request $request) {
@@ -200,6 +203,69 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('reportes')->group(fun
     Route::get('/caja', [ReporteController::class, 'resumenCaja']);
 
     Route::get('/dashboard', [ReporteController::class, 'dashboard']);
+
+});
+
+// Categorías de servicios
+Route::prefix('categorias-servicios')->group(function () {
+
+    // Consulta para pacientes
+    Route::middleware('auth:sanctum', 'role:paciente')->group(function () {
+
+        Route::get('/activas', [CategoriaServicioController::class, 'activas']);
+
+    });
+
+    // Gestión para doctora
+    Route::middleware('auth:sanctum', 'role:doctora')->group(function () {
+
+        Route::get('/', [CategoriaServicioController::class, 'index']);
+
+        Route::get('/{id}', [CategoriaServicioController::class, 'show']);
+
+        Route::post('/', [CategoriaServicioController::class, 'store']);
+
+        Route::put('/{id}', [CategoriaServicioController::class, 'update']);
+
+        Route::put('/{id}/desactivar', [CategoriaServicioController::class, 'desactivar']);
+
+        Route::put('/{id}/activar', [CategoriaServicioController::class, 'activar']);
+
+        Route::delete('/{id}', [CategoriaServicioController::class, 'destroy']);
+
+    });
+
+});
+
+
+// Servicios del consultorio
+Route::prefix('servicios-consultorio')->group(function () {
+
+    // Consulta para pacientes
+    Route::middleware('auth:sanctum', 'role:paciente')->group(function () {
+
+        Route::get('/activos', [ServicioConsultorioController::class, 'activos']);
+
+    });
+
+    // Gestión para doctora
+    Route::middleware('auth:sanctum', 'role:doctora')->group(function () {
+
+        Route::get('/', [ServicioConsultorioController::class, 'index']);
+
+        Route::get('/{id}', [ServicioConsultorioController::class, 'show']);
+
+        Route::post('/', [ServicioConsultorioController::class, 'store']);
+
+        Route::put('/{id}', [ServicioConsultorioController::class, 'update']);
+
+        Route::put('/{id}/desactivar', [ServicioConsultorioController::class, 'desactivar']);
+
+        Route::put('/{id}/activar', [ServicioConsultorioController::class, 'activar']);
+
+        Route::delete('/{id}', [ServicioConsultorioController::class, 'destroy']);
+
+    });
 
 });
 
