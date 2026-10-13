@@ -76,6 +76,53 @@ class ListPacientesTest extends TestCase
             ->assertJsonPath('next_page_url', null);
     }
 
+    public function test_search_finds_older_records_by_each_field_and_treats_wildcards_literally(): void
+    {
+        $target = Paciente::create(['nombres' => 'Ana 100%_!', 'cedula' => '0912345678', 'codigo_paciente' => 'PAC-001']);
+        $target->forceFill(['created_at' => '2020-01-01 00:00:00'])->save();
+        for ($i = 1; $i <= 25; $i++) {
+            Paciente::create(['nombres' => 'Otro', 'codigo_paciente' => 'OTRO-'.$i, 'cedula' => 'otro'.$i]);
+        }
+        Sanctum::actingAs(new User(['role' => 'doctora']));
+
+        foreach ([' ana ', '123456', 'pac-001', '%', '_', '!'] as $buscar) {
+            $this->getJson('/api/pacientes?'.http_build_query(['buscar' => $buscar]))
+                ->assertOk()->assertJsonPath('total', 1)->assertJsonPath('data.0.id', $target->id);
+        }
+
+        $this->getJson('/api/pacientes?buscar=0')->assertOk()->assertJsonPath('total', 3);
+        $this->getJson('/api/pacientes?'.http_build_query(['buscar' => "' OR 1=1 --"]))
+            ->assertOk()->assertJsonCount(0, 'data')->assertJsonPath('total', 0);
+        $this->getJson('/api/pacientes?buscar=%20%20')
+            ->assertOk()->assertJsonPath('total', 26)->assertJsonCount(20, 'data');
+    }
+
+    public function test_search_is_preserved_when_navigating_pages(): void
+    {
+        for ($i = 1; $i <= 21; $i++) {
+            Paciente::create(['nombres' => 'Coincide '.$i, 'codigo_paciente' => 'C'.$i, 'cedula' => 'C'.$i]);
+        }
+        Paciente::create(['nombres' => 'Sin resultado', 'codigo_paciente' => 'X', 'cedula' => 'X']);
+        Sanctum::actingAs(new User(['role' => 'doctora']));
+
+        $first = $this->getJson('/api/pacientes?buscar=coincide')
+            ->assertOk()->assertJsonPath('total', 21)->assertJsonCount(20, 'data');
+        $this->assertStringContainsString('buscar=coincide', $first->json('next_page_url'));
+        $second = $this->getJson($first->json('next_page_url'))
+            ->assertOk()->assertJsonPath('total', 21)->assertJsonCount(1, 'data')
+            ->assertJsonPath('current_page', 2)->assertJsonPath('next_page_url', null);
+        $this->assertNotContains($second->json('data.0.id'), array_column($first->json('data'), 'id'));
+    }
+
+    public function test_search_rejects_arrays_and_excessive_length(): void
+    {
+        Sanctum::actingAs(new User(['role' => 'doctora']));
+        foreach ([['ana'], str_repeat('a', 256)] as $buscar) {
+            $this->getJson('/api/pacientes?'.http_build_query(['buscar' => $buscar]))
+                ->assertUnprocessable()->assertJsonValidationErrors('buscar');
+        }
+    }
+
     public function test_guests_and_patients_cannot_list_patients(): void
     {
         $this->getJson('/api/pacientes')->assertUnauthorized();

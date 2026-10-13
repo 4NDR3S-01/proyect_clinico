@@ -9,11 +9,23 @@ use Illuminate\Support\Facades\DB;
 
 class PacienteService
 {
-    public function listar(): LengthAwarePaginator
+    public function listar(string $buscar = ''): LengthAwarePaginator
     {
-        return Paciente::orderBy('created_at', 'desc')
+        $buscar = trim($buscar);
+        $patron = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($buscar)).'%';
+
+        return Paciente::query()
+            ->when($buscar !== '', function ($query) use ($patron) {
+                $query->where(function ($query) use ($patron) {
+                    $query->whereRaw("LOWER(nombres) LIKE ? ESCAPE '!'", [$patron])
+                        ->orWhereRaw("LOWER(cedula) LIKE ? ESCAPE '!'", [$patron])
+                        ->orWhereRaw("LOWER(codigo_paciente) LIKE ? ESCAPE '!'", [$patron]);
+                });
+            })
+            ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->appends($buscar !== '' ? ['buscar' => $buscar] : []);
     }
 
     public function obtenerPorId(string $id): Paciente

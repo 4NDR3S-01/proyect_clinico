@@ -245,15 +245,29 @@ class AgendaService
             ];
         }
 
-        $registro = Agenda::create([
-            'paciente_id' => $user->paciente_id,
-            'fecha' => null,
-            'hora_inicio' => null,
-            'hora_fin' => null,
-            'tipo' => 'cita_medica',
-            'descripcion' => null,
-            'estado' => 'pendiente',
-        ]);
+        try {
+            $registro = DB::transaction(fn () => Agenda::create([
+                'paciente_id' => $user->paciente_id,
+                'fecha' => null,
+                'hora_inicio' => null,
+                'hora_fin' => null,
+                'tipo' => 'cita_medica',
+                'descripcion' => null,
+                'estado' => 'pendiente',
+            ]));
+        } catch (QueryException $exception) {
+            if (
+                ($exception->errorInfo[0] ?? null) !== '23505' ||
+                !str_contains($exception->errorInfo[2] ?? '', '"agenda_paciente_pendiente_unico"')
+            ) {
+                throw $exception;
+            }
+
+            return [
+                'estado' => 'solicitud_existente',
+                'registro' => null,
+            ];
+        }
 
         return [
             'estado' => 'creado',

@@ -14,11 +14,15 @@ class UsuarioController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        $datos = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:255'],
+        ]);
+
         $usuarios = $this
             ->usuarioService
-            ->listar();
+            ->listar($datos['buscar'] ?? '');
 
         return response()->json($usuarios);
     }

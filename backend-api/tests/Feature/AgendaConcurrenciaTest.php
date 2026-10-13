@@ -20,6 +20,8 @@ class AgendaConcurrenciaTest extends TestCase
 {
     private const MIGRATION = 'migrations/2026_10_13_000001_add_no_overlap_constraint_to_agenda_table.php';
 
+    private const PENDING_MIGRATION = 'migrations/2026_10_14_000001_add_unique_pending_request_to_agenda_table.php';
+
     private ?string $schema = null;
 
     private User $doctora;
@@ -54,6 +56,7 @@ class AgendaConcurrenciaTest extends TestCase
             '2026_10_03_030037_add_clinical_fields_to_agenda_table.php',
             '2026_10_03_191429_create_accion_registradas_table.php',
             basename(self::MIGRATION),
+            basename(self::PENDING_MIGRATION),
         ] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
@@ -220,16 +223,17 @@ class AgendaConcurrenciaTest extends TestCase
 
     public static function resultadosPrimeraTransaccion(): array
     {
-        return [['commit'], ['rollBack']];
+        return [['commit', false], ['rollBack', false], ['commit', true], ['rollBack', true]];
     }
 
     #[DataProvider('resultadosPrimeraTransaccion')]
-    public function test_concurrent_insert_waits_for_commit_or_rollback(string $finish): void
+    public function test_concurrent_insert_waits_for_commit_or_rollback(string $finish, bool $pendiente): void
     {
         if (!extension_loaded('pgsql')) {
             $this->markTestSkipped('La prueba asincrona requiere la extension pgsql.');
         }
 
+        $paciente = $pendiente ? $this->crearPaciente('001') : null;
         $config = DB::connection()->getConfig();
         $parameters = ['host' => $config['host'], 'port' => $config['port'],
             'dbname' => $config['database'], 'user' => $config['username'],
@@ -248,11 +252,21 @@ class AgendaConcurrenciaTest extends TestCase
             $this->assertSame(0, DB::table('agenda')->count());
             $this->assertSame('0', pg_fetch_result(pg_query($competidor, 'SELECT count(*) FROM agenda'), 0, 0));
 
-            DB::table('agenda')->insert($this->bloque());
-            pg_send_query_params($competidor,
-                "INSERT INTO agenda (id, tipo, fecha, hora_inicio, hora_fin) VALUES ($1, 'personal', '2026-10-20', '10:30', '11:30')",
-                [(string) Str::uuid()]
-            );
+            if ($pendiente) {
+                Agenda::create([
+                    'paciente_id' => $paciente->id, 'tipo' => 'cita_medica', 'estado' => 'pendiente',
+                ]);
+                pg_send_query_params($competidor,
+                    "INSERT INTO agenda (id, paciente_id, tipo, estado) VALUES ($1, $2, 'cita_medica', 'pendiente')",
+                    [(string) Str::uuid(), $paciente->id]
+                );
+            } else {
+                DB::table('agenda')->insert($this->bloque());
+                pg_send_query_params($competidor,
+                    "INSERT INTO agenda (id, tipo, fecha, hora_inicio, hora_fin) VALUES ($1, 'personal', '2026-10-20', '10:30', '11:30')",
+                    [(string) Str::uuid()]
+                );
+            }
 
             $waiting = false;
             $deadline = microtime(true) + 3;
@@ -267,7 +281,7 @@ class AgendaConcurrenciaTest extends TestCase
             DB::connection()->$finish();
             $result = pg_get_result($competidor);
             if ($finish === 'commit') {
-                $this->assertSame('23P01', pg_result_error_field($result, PGSQL_DIAG_SQLSTATE));
+                $this->assertSame($pendiente ? '23505' : '23P01', pg_result_error_field($result, PGSQL_DIAG_SQLSTATE));
                 pg_query($competidor, 'ROLLBACK');
             } else {
                 $this->assertSame(PGSQL_COMMAND_OK, pg_result_status($result));
@@ -280,5 +294,93 @@ class AgendaConcurrenciaTest extends TestCase
             }
             pg_close($competidor);
         }
+    }
+
+    private function crearPaciente(string $codigo): Paciente
+    {
+        return Paciente::create([
+            'codigo_paciente' => $codigo, 'nombres' => 'Paciente '.$codigo, 'cedula' => $codigo,
+        ]);
+    }
+
+    public function test_pending_request_race_returns_conflict_and_keeps_one_request(): void
+    {
+        $paciente = $this->crearPaciente('001');
+        Sanctum::actingAs(new User(['role' => 'paciente', 'paciente_id' => $paciente->id]));
+        $intercalada = false;
+
+        DB::listen(function (QueryExecuted $query) use (&$intercalada, $paciente) {
+            if (!$intercalada && $query->connectionName === 'agenda_test'
+                && str_starts_with($query->sql, 'select exists(')
+                && str_contains($query->sql, '"agenda"')) {
+                $intercalada = true;
+                DB::connection('agenda_competidor')->table('agenda')->insert([
+                    'id' => (string) Str::uuid(), 'paciente_id' => $paciente->id,
+                    'tipo' => 'cita_medica', 'estado' => 'pendiente',
+                ]);
+            }
+        });
+
+        $this->postJson('/api/agenda/solicitar-cita')->assertConflict()
+            ->assertExactJson(['message' => 'Ya tienes una solicitud de cita pendiente.']);
+        $this->assertTrue($intercalada);
+        $this->assertDatabaseCount('agenda', 1);
+        $this->assertSame(0, DB::transactionLevel());
+    }
+
+    public function test_pending_requests_are_per_patient_and_allow_requests_after_state_changes(): void
+    {
+        $paciente = $this->crearPaciente('001');
+        $otro = $this->crearPaciente('002');
+        $user = new User(['role' => 'paciente', 'paciente_id' => $paciente->id]);
+        Sanctum::actingAs($user);
+        $id = $this->postJson('/api/agenda/solicitar-cita')->assertCreated()->json('data.id');
+        $this->postJson('/api/agenda/solicitar-cita')->assertConflict();
+
+        Sanctum::actingAs(new User(['role' => 'paciente', 'paciente_id' => $otro->id]));
+        $this->postJson('/api/agenda/solicitar-cita')->assertCreated();
+
+        Sanctum::actingAs($user);
+        foreach (['programada', 'cancelada'] as $estado) {
+            Agenda::findOrFail($id)->update(['estado' => $estado]);
+            $id = $this->postJson('/api/agenda/solicitar-cita')->assertCreated()->json('data.id');
+        }
+        $this->assertSame(1, Agenda::where('paciente_id', $paciente->id)->where('estado', 'pendiente')->count());
+        $this->assertDatabaseCount('agenda', 4);
+    }
+
+    public function test_pending_migration_rejects_duplicates_without_changing_records(): void
+    {
+        $paciente = $this->crearPaciente('001');
+        $migration = require database_path(self::PENDING_MIGRATION);
+        $migration->down();
+        for ($i = 0; $i < 2; $i++) {
+            Agenda::create([
+                'paciente_id' => $paciente->id, 'tipo' => 'cita_medica', 'estado' => 'pendiente',
+            ]);
+        }
+        $before = DB::table('agenda')->orderBy('id')->get()->toJson();
+
+        try {
+            $migration->up();
+            $this->fail('La migracion debio rechazar solicitudes duplicadas.');
+        } catch (QueryException $exception) {
+            $this->assertSame('23505', $exception->errorInfo[0]);
+        }
+        $this->assertSame($before, DB::table('agenda')->orderBy('id')->get()->toJson());
+    }
+
+    public function test_pending_request_does_not_hide_unrelated_database_errors(): void
+    {
+        $user = new User(['paciente_id' => (string) Str::uuid()]);
+
+        try {
+            app(AgendaService::class)->solicitarCita($user);
+            $this->fail('El error de clave foranea debio propagarse.');
+        } catch (QueryException $exception) {
+            $this->assertSame('23503', $exception->errorInfo[0]);
+        }
+        $this->assertDatabaseCount('agenda', 0);
+        $this->assertSame(0, DB::transactionLevel());
     }
 }

@@ -36,3 +36,32 @@ adicionales de PostgreSQL.
 Si ya existen cruces, PostgreSQL rechaza la migración sin modificar las
 reservas. Deben revisarse esos registros antes de volver a aplicarla. La
 protección de concurrencia solo queda activa al aplicar esta migración.
+
+## Una solicitud pendiente por paciente
+
+Aplica también la migración del índice único parcial:
+
+```powershell
+php artisan migrate --path=database/migrations/2026_10_14_000001_add_unique_pending_request_to_agenda_table.php
+```
+
+El índice `agenda_paciente_pendiente_unico` permite una sola cita médica
+pendiente por paciente. Al programarla o cancelarla, se permite otra solicitud.
+Si dos peticiones compiten, una se guarda y la otra recibe HTTP 409.
+
+Si ya existen solicitudes pendientes duplicadas, la migración falla sin
+eliminarlas ni cambiarlas. Puedes detectarlas antes de aplicar la migración:
+
+```sql
+SELECT paciente_id, COUNT(*) AS cantidad
+FROM agenda
+WHERE tipo = 'cita_medica' AND estado = 'pendiente'
+  AND paciente_id IS NOT NULL
+GROUP BY paciente_id
+HAVING COUNT(*) > 1;
+```
+
+Las pruebas de `AgendaConcurrenciaTest` verifican el conflicto HTTP, la
+restricción con dos conexiones, commit y rollback, cambios de estado y rechazo
+de duplicados preexistentes. La protección requiere aplicar la migración;
+el cambio del servicio por sí solo no impide solicitudes simultáneas.

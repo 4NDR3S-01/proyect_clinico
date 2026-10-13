@@ -9,8 +9,11 @@ use Illuminate\Support\Facades\DB;
 
 class UsuarioService
 {
-    public function listar(): LengthAwarePaginator
+    public function listar(string $buscar = ''): LengthAwarePaginator
     {
+        $buscar = trim($buscar);
+        $patron = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($buscar)).'%';
+
         return User::query()
             ->select([
                 'id',
@@ -22,9 +25,17 @@ class UsuarioService
                 'activo',
                 'created_at',
             ])
+            ->when($buscar !== '', function ($query) use ($patron) {
+                $query->where(function ($query) use ($patron) {
+                    $query->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$patron])
+                        ->orWhereRaw("LOWER(username) LIKE ? ESCAPE '!'", [$patron])
+                        ->orWhereRaw("LOWER(email) LIKE ? ESCAPE '!'", [$patron]);
+                });
+            })
             ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->appends($buscar !== '' ? ['buscar' => $buscar] : []);
     }
 
     public function obtenerPorId(

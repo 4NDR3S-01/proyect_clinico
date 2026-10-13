@@ -16,9 +16,12 @@ class PacienteController extends Controller
     ) {
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $pacientes = $this->pacienteService->listar();
+        $datos = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:255'],
+        ]);
+        $pacientes = $this->pacienteService->listar($datos['buscar'] ?? '');
 
         return response()->json($pacientes);
     }
