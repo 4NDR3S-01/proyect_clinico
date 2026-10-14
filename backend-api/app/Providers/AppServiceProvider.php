@@ -23,6 +23,27 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('password-forgot', function (Request $request): array {
+            $email = $request->input('email');
+            $key = hash('sha256', is_string($email) ? Str::lower(trim($email)) : '');
+
+            return [
+                Limit::perMinute(10)->by('forgot-ip:'.$request->ip()),
+                Limit::perMinute(1)->by('forgot-minute:'.$key),
+                Limit::perHour(5)->by('forgot-hour:'.$key),
+            ];
+        });
+
+        RateLimiter::for('password-reset', function (Request $request): array {
+            $email = $request->input('email');
+            $key = hash('sha256', is_string($email) ? Str::lower(trim($email)) : '');
+
+            return [
+                Limit::perMinute(20)->by('reset-ip:'.$request->ip()),
+                Limit::perMinute(5)->by('reset-email:'.$key),
+            ];
+        });
+
         RateLimiter::for('auth-login', function (Request $request): array {
             $username = $request->input('username');
             $username = is_string($username) ? Str::lower(trim($username)) : '';

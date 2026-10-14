@@ -52,9 +52,11 @@ Route::prefix('auth')->group(function () {
     Route::post('/register-paciente', [AuthController::class, 'registerPaciente'])
         ->middleware('throttle:auth-register');
 
-    Route::post('/forgot-password', [PasswordController::class, 'forgotPassword']);
+    Route::post('/forgot-password', [PasswordController::class, 'forgotPassword'])
+        ->middleware('throttle:password-forgot');
 
-    Route::post('/reset-password', [PasswordController::class, 'resetPassword']);
+    Route::post('/reset-password', [PasswordController::class, 'resetPassword'])
+        ->middleware('throttle:password-reset');
 
 
     Route::post('/logout', [AuthController::class, 'logout'])
