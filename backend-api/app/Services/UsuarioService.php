@@ -4,15 +4,23 @@ namespace App\Services;
 
 use App\Models\Paciente;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class UsuarioService
 {
     public function listar(string $buscar = ''): LengthAwarePaginator
     {
         $buscar = trim($buscar);
-        $patron = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($buscar)).'%';
+
+        $patron = '%'.str_replace(
+            ['!', '%', '_'],
+            ['!!', '!%', '!_'],
+            mb_strtolower($buscar)
+        ).'%';
 
         return User::query()
             ->select([
@@ -27,15 +35,29 @@ class UsuarioService
             ])
             ->when($buscar !== '', function ($query) use ($patron) {
                 $query->where(function ($query) use ($patron) {
-                    $query->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$patron])
-                        ->orWhereRaw("LOWER(username) LIKE ? ESCAPE '!'", [$patron])
-                        ->orWhereRaw("LOWER(email) LIKE ? ESCAPE '!'", [$patron]);
+                    $query
+                        ->whereRaw(
+                            "LOWER(name) LIKE ? ESCAPE '!'",
+                            [$patron]
+                        )
+                        ->orWhereRaw(
+                            "LOWER(username) LIKE ? ESCAPE '!'",
+                            [$patron]
+                        )
+                        ->orWhereRaw(
+                            "LOWER(email) LIKE ? ESCAPE '!'",
+                            [$patron]
+                        );
                 });
             })
             ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(20)
-            ->appends($buscar !== '' ? ['buscar' => $buscar] : []);
+            ->appends(
+                $buscar !== ''
+                    ? ['buscar' => $buscar]
+                    : []
+            );
     }
 
     public function obtenerPorId(
@@ -391,5 +413,123 @@ class UsuarioService
                 'usuario' => $usuario->fresh(),
             ];
         });
+    }
+
+    public function actualizarFotoPerfil(
+        User $user,
+        UploadedFile $foto
+    ): User {
+        $extension = $foto->extension();
+
+        $nombreArchivo = Str::uuid().'.'.$extension;
+
+        $directorio = "clinica/usuarios/{$user->id}/perfil";
+
+        $ruta = "{$directorio}/{$nombreArchivo}";
+
+        $rutaAnterior = $user->foto_perfil_ruta;
+
+        Storage::disk('ftp')->put(
+            $ruta,
+            fopen($foto->getRealPath(), 'r')
+        );
+
+        try {
+            $usuarioActualizado = DB::transaction(
+                function () use (
+                    $user,
+                    $foto,
+                    $ruta,
+                    $nombreArchivo
+                ) {
+                    $user->update([
+                        'foto_perfil_ruta' => $ruta,
+                        'foto_perfil_nombre' => $nombreArchivo,
+                        'foto_perfil_mime' => $foto->getMimeType(),
+                        'foto_perfil_tamano' => $foto->getSize(),
+                    ]);
+
+                    AuditoriaService::registrarAccion(
+                        $user,
+                        'usuarios',
+                        'actualizar_foto_perfil',
+                        'Actualizaste tu foto de perfil.'
+                    );
+
+                    return $user->fresh();
+                }
+            );
+        } catch (\Throwable $e) {
+            if (Storage::disk('ftp')->exists($ruta)) {
+                Storage::disk('ftp')->delete($ruta);
+            }
+
+            throw $e;
+        }
+
+        if (
+            $rutaAnterior &&
+            $rutaAnterior !== $ruta
+        ) {
+            try {
+                if (
+                    Storage::disk('ftp')->exists(
+                        $rutaAnterior
+                    )
+                ) {
+                    Storage::disk('ftp')->delete(
+                        $rutaAnterior
+                    );
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $usuarioActualizado;
+    }
+
+    public function eliminarFotoPerfil(
+        User $user
+    ): User {
+        $rutaAnterior = $user->foto_perfil_ruta;
+
+        $usuarioActualizado = DB::transaction(
+            function () use ($user) {
+                $user->update([
+                    'foto_perfil_ruta' => null,
+                    'foto_perfil_nombre' => null,
+                    'foto_perfil_mime' => null,
+                    'foto_perfil_tamano' => null,
+                ]);
+
+                AuditoriaService::registrarAccion(
+                    $user,
+                    'usuarios',
+                    'eliminar_foto_perfil',
+                    'Eliminaste tu foto de perfil.'
+                );
+
+                return $user->fresh();
+            }
+        );
+
+        if ($rutaAnterior) {
+            try {
+                if (
+                    Storage::disk('ftp')->exists(
+                        $rutaAnterior
+                    )
+                ) {
+                    Storage::disk('ftp')->delete(
+                        $rutaAnterior
+                    );
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $usuarioActualizado;
     }
 }

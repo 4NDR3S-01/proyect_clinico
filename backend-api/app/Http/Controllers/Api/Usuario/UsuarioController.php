@@ -49,6 +49,10 @@ class UsuarioController extends Controller
                 'role' => $usuario->role,
                 'paciente_id' => $usuario->paciente_id,
                 'activo' => $usuario->activo,
+                'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
+                'foto_perfil_nombre' => $usuario->foto_perfil_nombre,
+                'foto_perfil_mime' => $usuario->foto_perfil_mime,
+                'foto_perfil_tamano' => $usuario->foto_perfil_tamano,
                 'created_at' => $usuario->created_at,
             ],
         ]);
@@ -86,6 +90,8 @@ class UsuarioController extends Controller
                 'username' => $asistente->username,
                 'role' => $asistente->role,
                 'activo' => $asistente->activo,
+                'foto_perfil_ruta' => $asistente->foto_perfil_ruta,
+                'foto_perfil_nombre' => $asistente->foto_perfil_nombre,
             ],
         ]);
     }
@@ -396,6 +402,55 @@ class UsuarioController extends Controller
                 'role' => $usuario->role,
                 'paciente_id' => $usuario->paciente_id,
                 'activo' => $usuario->activo,
+            ],
+        ]);
+    }
+
+    public function actualizarFotoPerfil(
+        Request $request
+    ): JsonResponse {
+        $request->validate([
+            'foto' => [
+                'required',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:5120',
+            ],
+        ]);
+
+        $usuario = $this
+            ->usuarioService
+            ->actualizarFotoPerfil(
+                $request->user(),
+                $request->file('foto')
+            );
+
+        return response()->json([
+            'message' => 'Foto de perfil actualizada correctamente.',
+            'data' => [
+                'id' => $usuario->id,
+                'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
+                'foto_perfil_nombre' => $usuario->foto_perfil_nombre,
+                'foto_perfil_mime' => $usuario->foto_perfil_mime,
+                'foto_perfil_tamano' => $usuario->foto_perfil_tamano,
+            ],
+        ]);
+    }
+
+    public function eliminarFotoPerfil(
+        Request $request
+    ): JsonResponse {
+        $usuario = $this
+            ->usuarioService
+            ->eliminarFotoPerfil(
+                $request->user()
+            );
+
+        return response()->json([
+            'message' => 'Foto de perfil eliminada correctamente.',
+            'data' => [
+                'id' => $usuario->id,
+                'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
             ],
         ]);
     }

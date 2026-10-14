@@ -20,6 +20,10 @@ class User extends Authenticatable
         'role',
         'paciente_id',
         'activo',
+        'foto_perfil_ruta',
+        'foto_perfil_nombre',
+        'foto_perfil_mime',
+        'foto_perfil_tamano',
     ];
 
     protected $hidden = [
@@ -33,6 +37,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'activo' => 'boolean',
+            'foto_perfil_tamano' => 'integer',
         ];
     }
 }

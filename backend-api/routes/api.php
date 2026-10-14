@@ -95,6 +95,12 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('usuarios')->group(fun
     Route::get('/{id}', [UsuarioController::class, 'show']);
 });
 
+// Foto de perfil del usuario autenticado
+Route::middleware('auth:sanctum')->prefix('perfil')->group(function () {
+    Route::post('/foto', [UsuarioController::class, 'actualizarFotoPerfil']);
+    Route::delete('/foto', [UsuarioController::class, 'eliminarFotoPerfil']);
+});
+
 // Pacientes
 Route::middleware('auth:sanctum','role:doctora,asistente')->prefix('pacientes')->group(function () {
     Route::get('/', [PacienteController::class, 'index']);
