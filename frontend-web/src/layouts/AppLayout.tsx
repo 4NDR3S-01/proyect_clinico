@@ -107,7 +107,7 @@ export function AppLayout() {
   }, [open])
 
   return (
-    <div className="admin-shell min-h-screen lg:grid lg:grid-cols-[272px_1fr]">
+    <div className={`admin-shell min-h-screen lg:grid lg:grid-cols-[272px_1fr] ${location.pathname === '/' ? 'dashboard-shell' : ''}`}>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] lg:block"><Sidebar/></aside>
       {open ? (
         <div aria-label="Menú de navegación" aria-modal="true" className="fixed inset-0 z-40 lg:hidden" ref={drawerRef} role="dialog">

@@ -50,7 +50,7 @@ describe('AuthProvider', () => {
     fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'valid-password-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
 
-    expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     expect(getAccessToken()).toBe('token-confirmado')
   })
 
@@ -123,7 +123,7 @@ describe('AuthProvider', () => {
     vi.mocked(authService.logout).mockRejectedValue(new Error('network'))
     render(<MemoryRouter initialEntries={['/']}><AuthProvider><AppRouter/></AuthProvider></MemoryRouter>)
 
-    expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
 
     expect(await screen.findByRole('heading', { name: 'Bienvenido de nuevo' })).toBeInTheDocument()

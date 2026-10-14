@@ -1,4 +1,4 @@
-﻿import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppRouter } from './AppRouter'
@@ -107,7 +107,7 @@ describe('AppRouter', () => {
   it('redirects authenticated users away from password recovery', async () => {
     renderRouter('authenticated', '/recuperar-contrasena', undefined, authenticatedUser('doctora'))
 
-    expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Recupera tu acceso' })).not.toBeInTheDocument()
   })
 
@@ -144,27 +144,25 @@ describe('AppRouter', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('No fue posible comunicarse con el servidor.')
   })
 
-  it('separates available modules from pending integrations without claiming there are no records', async () => {
+  it('shows the real dashboard sections without claiming there are no records before loading', async () => {
     renderRouter('authenticated')
 
-    expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Módulos' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Disponibles ahora' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'En preparación' })).toBeInTheDocument()
-    expect(screen.getByText(/Diagnóstico, tratamiento y observación de citas se registran desde Citas médicas/)).toBeInTheDocument()
-    expect(screen.queryByText(/No hay citas|No hay pacientes/)).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agenda de hoy' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Accesos rápidos' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Solicitudes pendientes' })).toBeInTheDocument()
   })
 
   it.each(['doctora', 'asistente'] as const)('offers Citas médicas from the dashboard only to %s when authorized', async (role) => {
     renderRouter('authenticated', '/', undefined, authenticatedUser(role))
-    await screen.findByRole('heading', { name: 'Disponibles ahora' })
+    await screen.findByRole('heading', { name: 'Accesos rápidos' })
     const main = within(screen.getByRole('main'))
     if (role === 'doctora') {
-      expect(main.getByRole('link', { name: /AgendaCalendario y registros existentes/ })).toHaveAttribute('href', '/agenda')
-      expect(main.getByRole('link', { name: /Citas médicasConsulta, programa y gestiona las citas registradas/ })).toHaveAttribute('href', '/citas-medicas')
+      expect(main.getByRole('link', { name: /Ver agenda completa/ })).toHaveAttribute('href', '/agenda')
+      expect(main.getByRole('link', { name: /Citas médicasConsulta y gestión/ })).toHaveAttribute('href', '/citas-medicas')
     } else {
-      expect(main.queryByRole('link', { name: /AgendaCalendario y registros existentes/ })).not.toBeInTheDocument()
-      expect(main.queryByRole('link', { name: /Citas médicasConsulta, programa y gestiona las citas registradas/ })).not.toBeInTheDocument()
+      expect(main.queryByRole('link', { name: /Ver agenda completa/ })).not.toBeInTheDocument()
+      expect(main.queryByRole('link', { name: /Citas médicasConsulta y gestión/ })).not.toBeInTheDocument()
     }
   })
 
@@ -189,10 +187,10 @@ describe('AppRouter', () => {
     act(() => window.dispatchEvent(new Event(AUTH_FORBIDDEN_EVENT)))
 
     expect(screen.getByRole('heading', { name: 'Acceso no autorizado' })).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar aviso' }))
     expect(screen.queryByRole('heading', { name: 'Acceso no autorizado' })).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
   })
 
   it('opens and closes the mobile navigation with Escape', () => {
@@ -242,8 +240,8 @@ describe('AppRouter', () => {
     expect(Boolean(navigation.queryByRole('link', { name: 'Pacientes' }))).toBe(seesPatients)
     expect(navigation.queryByRole('link', { name: 'Mi perfil' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Registrar paciente' })).not.toBeInTheDocument()
-    await screen.findByRole('heading', { name: 'Bienvenido' })
-    expect(screen.queryAllByRole('link', { name: 'Abrir pacientes' })).toHaveLength(seesPatients ? 1 : 0)
+    await screen.findByRole('heading', { name: 'Resumen de gestión' })
+    expect(screen.queryAllByRole('link', { name: /PacientesListado y registro/ })).toHaveLength(seesPatients ? 1 : 0)
     expect(Boolean(navigation.queryByRole('link', { name: 'Agenda' }))).toBe(role === 'doctora')
     expect(Boolean(navigation.queryByRole('link', { name: 'Citas médicas' }))).toBe(role === 'doctora')
     expect(Boolean(navigation.queryByRole('link', { name: 'Caja' }))).toBe(role === 'doctora')
@@ -287,7 +285,7 @@ describe('AppRouter', () => {
       const back = screen.getByRole('link', { name: 'Volver al Dashboard' })
       expect(back).toHaveAttribute('href', '/')
       fireEvent.click(back)
-      expect(await screen.findByRole('heading', { name: 'Bienvenido' })).toBeInTheDocument()
+      expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     }
   })
 
