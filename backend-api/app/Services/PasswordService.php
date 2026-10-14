@@ -4,28 +4,19 @@ namespace App\Services;
 
 use App\Models\PasswordResetCode;
 use App\Models\User;
+use Brevo\Exceptions\BrevoException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use Symfony\Component\Mailer\Exception\TransportException;
-use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class PasswordService
 {
+    public function __construct(private BrevoEmailService $emailService) {}
+
     public function enviarCodigoRecuperacion(string $email): void
     {
-        // Never silently accept simulated delivery in production.
-        if (app()->environment('production')) {
-            $mailer = config('mail.default');
-            abort_unless(
-                in_array(config("mail.mailers.$mailer.transport"), ['smtp', 'ses', 'ses-v2', 'postmark', 'resend', 'sendmail'], true),
-                503,
-                'El servicio de correo no está disponible temporalmente.'
-            );
-        }
+        $this->emailService->ensureConfigured();
 
         try {
             DB::transaction(function () use ($email): void {
@@ -48,23 +39,11 @@ class PasswordService
                     'expires_at' => now()->addMinutes(5),
                 ]);
 
-                // A transport failure rolls back issuance, preserving the previous code.
-                $sent = Mail::raw(
-                    "Tu código de recuperación es: {$codigo}\n\n"
-                    ."Este código expira en 5 minutos. No lo compartas con nadie.\n\n"
-                    .'Si no solicitaste este cambio, ignora este correo.',
-                    function ($message) use ($user): void {
-                        $message->to($user->email)->subject('Código de recuperación de contraseña');
-                    }
-                );
-                if ($sent === null) {
-                    throw new TransportException('Delivery cancelled');
-                }
+                // API failure rolls back issuance, preserving the previous code.
+                $this->emailService->sendRecoveryCode($user->email, $codigo);
             });
-        } catch (TransportExceptionInterface $e) {
-            // Never log codes, addresses, credentials or SMTP exception contents.
-            Log::error('password_reset_mail_failed', ['exception_type' => $e::class]);
-            // Same public response for existing, missing and inactive accounts.
+        } catch (BrevoException) {
+            abort(503, 'No se pudo enviar el código. Inténtalo nuevamente más tarde.');
         }
     }
 

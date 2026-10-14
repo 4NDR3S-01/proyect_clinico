@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use Brevo\Brevo;
+use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -15,7 +17,20 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(Brevo::class, fn () => new Brevo(
+            apiKey: (string) config('services.brevo.api_key'),
+            options: [
+                'client' => new Client([
+                    'connect_timeout' => 5,
+                    'timeout' => 15,
+                    'allow_redirects' => false,
+                    'http_errors' => false,
+                ]),
+                // Retrying a send after a timeout can deliver duplicate codes.
+                'maxRetries' => 0,
+                'timeout' => 15,
+            ],
+        ));
     }
 
     /**

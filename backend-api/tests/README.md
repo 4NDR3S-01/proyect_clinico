@@ -1,5 +1,30 @@
 # Pruebas
 
+## Resumen de migraciones de protección
+
+Ejecutar los comandos de este documento desde `backend-api`, con la conexión
+configurada hacia la base de datos que se desea actualizar.
+
+| Migración | Protección |
+| --- | --- |
+| `2026_10_13_000001_add_no_overlap_constraint_to_agenda_table.php` | Restricción de PostgreSQL que impide cruces de horarios en la agenda. |
+| `2026_10_14_000001_add_unique_pending_request_to_agenda_table.php` | Índice único parcial de PostgreSQL que impide solicitudes pendientes duplicadas por paciente. |
+| `2026_10_13_230949_create_password_reset_codes_table.php` | Crea la tabla de códigos de recuperación de contraseña. |
+| `2026_10_14_000002_add_attempts_to_password_reset_codes_table.php` | Agrega el contador de intentos incorrectos de recuperación. |
+
+Para comprobar cuáles están aplicadas:
+
+```powershell
+php artisan migrate:status
+```
+
+Los comandos individuales aparecen en las secciones siguientes. Artisan omite
+las migraciones que ya figuran como ejecutadas. Las dos protecciones de agenda
+requieren resolver los cruces o duplicados existentes antes de poder aplicarse;
+no eliminan esos datos automáticamente.
+
+## Ejecutar pruebas
+
 La suite habitual usa SQLite en memoria:
 
 ```powershell
@@ -65,3 +90,16 @@ Las pruebas de `AgendaConcurrenciaTest` verifican el conflicto HTTP, la
 restricción con dos conexiones, commit y rollback, cambios de estado y rechazo
 de duplicados preexistentes. La protección requiere aplicar la migración;
 el cambio del servicio por sí solo no impide solicitudes simultáneas.
+
+## Migraciones de recuperación de contraseña
+
+Son independientes de las protecciones de agenda y se aplican en este orden:
+
+```powershell
+php artisan migrate --path=database/migrations/2026_10_13_230949_create_password_reset_codes_table.php
+php artisan migrate --path=database/migrations/2026_10_14_000002_add_attempts_to_password_reset_codes_table.php
+```
+
+La primera crea la tabla de códigos; la segunda agrega el contador necesario
+para limitar los intentos incorrectos. La configuración del envío mediante Brevo
+está documentada en [Recuperación de contraseña](../docs/password-recovery.md).

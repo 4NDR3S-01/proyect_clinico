@@ -5,20 +5,45 @@ namespace Tests\Feature;
 use App\Models\PasswordResetCode;
 use App\Models\User;
 use App\Services\PasswordService;
+use Brevo\Brevo;
+use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Symfony\Component\Mailer\Exception\TransportException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class PasswordRecoveryTest extends TestCase
 {
     private User $user;
 
+    private MockHandler $responses;
+
+    private array $requests = [];
+
     protected function setUp(): void
     {
         parent::setUp();
+        config([
+            'services.brevo.api_key' => 'test-api-key',
+            'mail.from.address' => 'clinic@example.test',
+            'mail.from.name' => 'Clínica de prueba',
+        ]);
+        $this->responses = new MockHandler(array_map(
+            fn () => new Response(201, [], '{"messageId":"test-message"}'), range(1, 20)
+        ));
+        $handler = HandlerStack::create($this->responses);
+        $handler->push(Middleware::history($this->requests));
+        $this->app->instance(Brevo::class, new Brevo(apiKey: 'test-api-key', options: [
+            'client' => new Client(['handler' => $handler, 'http_errors' => false, 'allow_redirects' => false]),
+            'maxRetries' => 0, 'timeout' => 15,
+        ]));
         foreach ([
             '0001_01_01_000000_create_users_table.php',
             '2026_09_19_182046_create_personal_access_tokens_table.php',
@@ -37,9 +62,17 @@ class PasswordRecoveryTest extends TestCase
     private function issue(): string
     {
         $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])->assertOk();
-        $message = Mail::mailer()->getSymfonyTransport()->messages()->last()->getOriginalMessage();
-        $this->assertSame($this->user->email, $message->getTo()[0]->getAddress());
-        preg_match('/\b[0-9]{6}\b/', $message->getTextBody(), $matches);
+        $request = $this->requests[array_key_last($this->requests)]['request'];
+        $this->assertSame('POST', $request->getMethod());
+        $this->assertSame('https://api.brevo.com/v3/smtp/email', (string) $request->getUri());
+        $this->assertSame('test-api-key', $request->getHeaderLine('api-key'));
+        $message = json_decode((string) $request->getBody(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($this->user->email, $message['to'][0]['email']);
+        $this->assertSame('clinic@example.test', $message['sender']['email']);
+        $this->assertSame('Clínica de prueba', $message['sender']['name']);
+        preg_match('/\b[0-9]{6}\b/', $message['textContent'], $matches);
+        $this->assertStringContainsString($matches[0], $message['htmlContent']);
+        $this->assertStringContainsString('Clínica de prueba', $message['htmlContent']);
 
         return $matches[0];
     }
@@ -93,7 +126,7 @@ class PasswordRecoveryTest extends TestCase
         $inactive = $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])->assertOk()->json();
         $this->assertSame($active, $missing);
         $this->assertSame($active, $inactive);
-        $this->assertCount(1, Mail::mailer()->getSymfonyTransport()->messages());
+        $this->assertCount(1, $this->requests);
     }
 
     public function test_resend_cooldown_applies_across_ips_and_case_variants(): void
@@ -119,25 +152,29 @@ class PasswordRecoveryTest extends TestCase
         $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])->assertStatus(429);
     }
 
-    public function test_transport_failure_preserves_previous_code_and_hides_smtp_details(): void
+    public function test_api_failure_preserves_previous_code_and_hides_provider_details(): void
     {
         $code = $this->issue();
         $id = PasswordResetCode::first()->id;
         $this->travel(61)->seconds();
-        Mail::shouldReceive('raw')->once()->andThrow(new TransportException('sensitive smtp details'));
-        Log::shouldReceive('error')->once()->with('password_reset_mail_failed', ['exception_type' => TransportException::class]);
+        $this->responses->reset();
+        $this->responses->append(new Response(401, [], '{"message":"sensitive provider details"}'));
+        Log::shouldReceive('error')->once()->with('password_reset_mail_failed', [
+            'provider' => 'brevo_api', 'http_status' => 401, 'reason' => 'invalid_api_key',
+        ]);
         $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])
-            ->assertOk()->assertDontSee('sensitive smtp details');
+            ->assertStatus(503)->assertDontSee('sensitive provider details');
         $this->assertSame($id, PasswordResetCode::first()->id);
         $this->postJson('/api/auth/reset-password', $this->payload($code))->assertOk();
     }
 
-    public function test_production_rejects_log_transport_even_for_unknown_email(): void
+    public function test_missing_api_key_returns_service_unavailable_even_for_unknown_email(): void
     {
         $this->app->instance('env', 'production');
-        config(['mail.default' => 'log']);
+        config(['services.brevo.api_key' => '']);
         $this->postJson('/api/auth/forgot-password', ['email' => 'missing@example.test'])->assertStatus(503);
         $this->assertSame(0, PasswordResetCode::count());
+        $this->assertCount(0, $this->requests);
     }
 
     public function test_validation_requires_digits_and_matching_password_confirmation(): void
@@ -179,7 +216,7 @@ class PasswordRecoveryTest extends TestCase
         $id = PasswordResetCode::first()->id;
         app(PasswordService::class)->enviarCodigoRecuperacion($this->user->email);
         $this->assertSame($id, PasswordResetCode::first()->id);
-        $this->assertCount(1, Mail::mailer()->getSymfonyTransport()->messages());
+        $this->assertCount(1, $this->requests);
     }
 
     public function test_reset_is_atomic_when_token_revocation_fails(): void
@@ -189,5 +226,50 @@ class PasswordRecoveryTest extends TestCase
         $this->postJson('/api/auth/reset-password', $this->payload($code))->assertStatus(500);
         $this->assertNull(PasswordResetCode::first()->used_at);
         $this->assertTrue(Hash::check('Original123!', $this->user->fresh()->password));
+    }
+
+    public static function failedResponses(): array
+    {
+        return [
+            [400, '{"message":"private data"}', 'invalid_request_or_sender'],
+            [403, '{}', 'account_or_ip_not_authorized'],
+            [429, '{}', 'provider_rate_limit'],
+            [500, '{}', 'provider_error'],
+            [201, '{}', 'connection_or_invalid_response'],
+            [201, 'invalid json', 'connection_or_invalid_response'],
+            [204, '', 'connection_or_invalid_response'],
+        ];
+    }
+
+    #[DataProvider('failedResponses')]
+    public function test_failed_delivery_does_not_create_a_code_or_retry(int $status, string $body, string $reason): void
+    {
+        $this->responses->reset();
+        $this->responses->append(new Response($status, [], $body));
+        Log::shouldReceive('error')->once()->with('password_reset_mail_failed', [
+            'provider' => 'brevo_api', 'http_status' => $status >= 400 ? $status : null, 'reason' => $reason,
+        ]);
+        $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])
+            ->assertStatus(503)->assertDontSee('private data')->assertDontSee('test-api-key');
+        $this->assertSame(0, PasswordResetCode::count());
+        $this->assertCount(1, $this->requests);
+    }
+
+    public function test_network_failure_is_handled_without_exposing_credentials(): void
+    {
+        $this->responses->reset();
+        $this->responses->append(new ConnectException('private connection details', new Request('POST', 'https://api.brevo.com/v3/smtp/email')));
+        $this->postJson('/api/auth/forgot-password', ['email' => $this->user->email])
+            ->assertStatus(503)->assertDontSee('private connection details');
+        $this->assertSame(0, PasswordResetCode::count());
+        $this->assertCount(1, $this->requests);
+    }
+
+    public function test_api_delivery_works_in_production_even_when_mailer_is_log(): void
+    {
+        $this->app->instance('env', 'production');
+        config(['mail.default' => 'log']);
+        $this->issue();
+        $this->assertCount(1, $this->requests);
     }
 }
