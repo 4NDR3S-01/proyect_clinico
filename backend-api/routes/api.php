@@ -96,6 +96,10 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('usuarios')->group(fun
 });
 
 // Foto de perfil del usuario autenticado
+Route::get('/usuarios/{usuario}/foto', [UsuarioController::class, 'verFotoPerfil'])
+    ->middleware('auth:sanctum')
+    ->name('usuarios.foto');
+
 Route::middleware('auth:sanctum')->prefix('perfil')->group(function () {
     Route::post('/foto', [UsuarioController::class, 'actualizarFotoPerfil']);
     Route::delete('/foto', [UsuarioController::class, 'eliminarFotoPerfil']);

@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api\Usuario;
 
 use App\Http\Controllers\Controller;
+use App\Models\Paciente;
+use App\Models\User;
 use App\Services\UsuarioService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UsuarioController extends Controller
 {
@@ -49,6 +53,7 @@ class UsuarioController extends Controller
                 'role' => $usuario->role,
                 'paciente_id' => $usuario->paciente_id,
                 'activo' => $usuario->activo,
+                'foto_perfil_url' => $usuario->foto_perfil_url,
                 'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
                 'foto_perfil_nombre' => $usuario->foto_perfil_nombre,
                 'foto_perfil_mime' => $usuario->foto_perfil_mime,
@@ -90,6 +95,7 @@ class UsuarioController extends Controller
                 'username' => $asistente->username,
                 'role' => $asistente->role,
                 'activo' => $asistente->activo,
+                'foto_perfil_url' => $asistente->foto_perfil_url,
                 'foto_perfil_ruta' => $asistente->foto_perfil_ruta,
                 'foto_perfil_nombre' => $asistente->foto_perfil_nombre,
             ],
@@ -406,6 +412,35 @@ class UsuarioController extends Controller
         ]);
     }
 
+    public function verFotoPerfil(Request $request, User $usuario): StreamedResponse
+    {
+        $lector = $request->user();
+
+        abort_unless(
+            $lector->is($usuario) || (
+                in_array($lector->role, ['doctora', 'asistente'], true)
+                && $usuario->role === 'paciente'
+                && $usuario->paciente_id
+                && Paciente::whereKey($usuario->paciente_id)->exists()
+            ),
+            403
+        );
+
+        $disco = Storage::disk('ftp');
+        abort_unless($usuario->foto_perfil_ruta && $disco->exists($usuario->foto_perfil_ruta), 404);
+
+        return $disco->response(
+            $usuario->foto_perfil_ruta,
+            $usuario->foto_perfil_nombre,
+            [
+                'Content-Type' => $usuario->foto_perfil_mime ?? 'application/octet-stream',
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+            'inline'
+        );
+    }
+
     public function actualizarFotoPerfil(
         Request $request
     ): JsonResponse {
@@ -429,6 +464,7 @@ class UsuarioController extends Controller
             'message' => 'Foto de perfil actualizada correctamente.',
             'data' => [
                 'id' => $usuario->id,
+                'foto_perfil_url' => $usuario->foto_perfil_url,
                 'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
                 'foto_perfil_nombre' => $usuario->foto_perfil_nombre,
                 'foto_perfil_mime' => $usuario->foto_perfil_mime,
@@ -450,6 +486,7 @@ class UsuarioController extends Controller
             'message' => 'Foto de perfil eliminada correctamente.',
             'data' => [
                 'id' => $usuario->id,
+                'foto_perfil_url' => $usuario->foto_perfil_url,
                 'foto_perfil_ruta' => $usuario->foto_perfil_ruta,
             ],
         ]);

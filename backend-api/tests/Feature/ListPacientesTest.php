@@ -14,6 +14,14 @@ class ListPacientesTest extends TestCase
         parent::setUp();
 
         (require database_path('migrations/2026_09_25_012937_create_pacientes_table.php'))->up();
+        foreach ([
+            '0001_01_01_000000_create_users_table.php',
+            '2026_09_25_163636_add_username_and_role_to_users_table.php',
+            '2026_09_25_164339_add_paciente_id_to_users_table.php',
+            '2026_10_14_035447_add_profile_photo_fields_to_users_table.php',
+        ] as $migration) {
+            (require database_path('migrations/'.$migration))->up();
+        }
     }
 
     public function test_staff_can_navigate_twenty_patients_per_page_without_duplicates(): void

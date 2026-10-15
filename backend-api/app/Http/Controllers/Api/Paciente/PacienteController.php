@@ -88,6 +88,7 @@ class PacienteController extends Controller
 
         return response()->json([
             'data' => [
+                'foto_perfil_url' => $user->foto_perfil_url,
                 'codigo_paciente' => $paciente->codigo_paciente,
                 'nombres' => $paciente->nombres,
                 'cedula' => $paciente->cedula,

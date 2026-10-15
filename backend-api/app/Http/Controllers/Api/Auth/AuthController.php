@@ -48,6 +48,7 @@ class AuthController extends Controller
                 'username' => $user->username,
                 'email' => $resultado['user']->email,
                 'role' => $user->role,
+                'foto_perfil_url' => $user->foto_perfil_url,
                 'paciente_id' => $user->paciente_id,
                 'activo' => $user->activo,
             ],
@@ -86,6 +87,7 @@ class AuthController extends Controller
                 'name' => $resultado['user']->name,
                 'username' => $resultado['user']->username,
                 'role' => $resultado['user']->role,
+                'foto_perfil_url' => $resultado['user']->foto_perfil_url,
                 'paciente_id' =>
                     $resultado['paciente']->id,
                 'codigo_paciente' =>

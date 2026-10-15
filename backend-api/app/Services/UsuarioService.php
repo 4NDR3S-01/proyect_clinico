@@ -31,6 +31,7 @@ class UsuarioService
                 'role',
                 'paciente_id',
                 'activo',
+                'foto_perfil_ruta',
                 'created_at',
             ])
             ->when($buscar !== '', function ($query) use ($patron) {

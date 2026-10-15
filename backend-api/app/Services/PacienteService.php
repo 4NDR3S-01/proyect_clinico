@@ -15,6 +15,7 @@ class PacienteService
         $patron = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($buscar)).'%';
 
         return Paciente::query()
+            ->with('usuario:id,paciente_id,foto_perfil_ruta')
             ->when($buscar !== '', function ($query) use ($patron) {
                 $query->where(function ($query) use ($patron) {
                     $query->whereRaw("LOWER(nombres) LIKE ? ESCAPE '!'", [$patron])
@@ -25,12 +26,14 @@ class PacienteService
             ->orderBy('created_at', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(20)
+            ->through(fn (Paciente $paciente) => $paciente->append('foto_perfil_url'))
             ->appends($buscar !== '' ? ['buscar' => $buscar] : []);
     }
 
     public function obtenerPorId(string $id): Paciente
     {
-        return Paciente::findOrFail($id);
+        return Paciente::with('usuario:id,paciente_id,foto_perfil_ruta')
+            ->findOrFail($id)->append('foto_perfil_url');
     }
 
     public function crear(

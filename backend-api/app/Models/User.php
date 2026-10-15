@@ -31,6 +31,15 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = ['foto_perfil_url'];
+
+    public function getFotoPerfilUrlAttribute(): ?string
+    {
+        return $this->foto_perfil_ruta
+            ? route('usuarios.foto', ['usuario' => $this->id])
+            : null;
+    }
+
     protected function casts(): array
     {
         return [

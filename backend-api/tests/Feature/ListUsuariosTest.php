@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\Paciente;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -18,6 +20,7 @@ class ListUsuariosTest extends TestCase
             '2026_09_25_163636_add_username_and_role_to_users_table.php',
             '2026_09_25_164339_add_paciente_id_to_users_table.php',
             '2026_09_30_034413_add_activo_to_users_table.php',
+            '2026_10_14_035447_add_profile_photo_fields_to_users_table.php',
         ] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
@@ -74,6 +77,54 @@ class ListUsuariosTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data')
             ->assertJsonPath('total', 25);
+    }
+
+    public function test_profile_photos_are_served_only_to_the_owner_and_patient_staff(): void
+    {
+        Storage::fake('ftp');
+        $paciente = Paciente::create([
+            'codigo_paciente' => '001', 'nombres' => 'Ana', 'cedula' => '1234567890',
+        ]);
+        $owner = User::factory()->create([
+            'role' => 'paciente', 'paciente_id' => $paciente->id,
+            'foto_perfil_ruta' => 'perfil/ana.png', 'foto_perfil_mime' => 'image/png',
+        ]);
+        $image = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=');
+        Storage::disk('ftp')->put($owner->foto_perfil_ruta, $image);
+        $url = $owner->foto_perfil_url;
+
+        $this->getJson($url)->assertUnauthorized();
+        Sanctum::actingAs($owner);
+        $this->getJson('/api/user')->assertJsonPath('foto_perfil_url', $url);
+        $this->get($url)->assertOk()->assertHeader('Content-Type', 'image/png')
+            ->assertStreamedContent($image);
+
+        foreach (['doctora', 'asistente'] as $role) {
+            $staff = User::factory()->create(['role' => $role]);
+            Sanctum::actingAs($staff);
+            $this->get($url)->assertOk()->assertStreamedContent($image);
+            $this->getJson('/api/pacientes')->assertOk()->assertJsonPath('data.0.foto_perfil_url', $url);
+            $this->getJson('/api/pacientes/'.$paciente->id)->assertOk()->assertJsonPath('data.foto_perfil_url', $url);
+            $staff->update(['foto_perfil_ruta' => $owner->foto_perfil_ruta, 'foto_perfil_mime' => 'image/png']);
+            $this->get($staff->foto_perfil_url)->assertOk()->assertStreamedContent($image);
+            Sanctum::actingAs($owner);
+            $this->getJson($staff->foto_perfil_url)->assertForbidden();
+        }
+
+        Sanctum::actingAs(User::factory()->create(['role' => 'paciente']));
+        $this->getJson($url)->assertForbidden();
+        Sanctum::actingAs($staff);
+        $otherStaff = User::factory()->create(['role' => 'doctora', 'foto_perfil_ruta' => 'perfil/otra.png']);
+        $this->getJson($otherStaff->foto_perfil_url)->assertForbidden();
+        $owner->update(['paciente_id' => null]);
+        $this->getJson($url)->assertForbidden();
+
+        Sanctum::actingAs($owner);
+        Storage::disk('ftp')->delete($owner->foto_perfil_ruta);
+        $this->getJson($url)->assertNotFound();
+        $owner->update(['foto_perfil_ruta' => null]);
+        $this->assertNull($owner->foto_perfil_url);
+        $this->getJson($url)->assertNotFound();
     }
 
     public function test_empty_list_keeps_pagination_metadata(): void
