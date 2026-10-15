@@ -6,6 +6,7 @@ const accountSchema = z.object({
   id: z.string(), name: z.string(), email: z.string().nullable(), username: z.string(),
   role: z.enum(['doctora', 'asistente', 'paciente']), paciente_id: z.string().nullable(),
   activo: z.boolean(), created_at: z.string().nullable(),
+  foto_perfil_url: z.string().nullable().optional(),
 })
 export type Account = z.infer<typeof accountSchema>
 

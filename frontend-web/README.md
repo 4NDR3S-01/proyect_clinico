@@ -34,6 +34,8 @@ Historial clínico está integrado en el expediente web: doctora/asistente consu
 
 Las pruebas automatizadas y el QA de navegador con respuestas aisladas de prueba no equivalen a E2E contra Laravel. No hay una prueba E2E autenticada documentada para estas integraciones; la eliminación real de asistente y los cambios reales del historial requieren prueba manual autorizada. Antes de integrar, volver a inspeccionar `origin/backend` actualizado; no asumir que un SHA histórico representa el contrato actual.
 
+El expediente navega por Historial clínico, Diagnósticos y Evidencias clínicas. Los datos generales se muestran junto al historial; Tratamientos y Odontograma son apartados internos de Diagnósticos y esperan un contrato de consulta clínica suficiente. Agenda permite a la doctora registrar una cita desde el día seleccionado mediante el contrato existente. El perfil propio y su fotografía están en el encabezado; las fotos de pacientes vinculados se obtienen con Bearer desde Laravel. Recetas y Planes/presupuestos se retiraron de la navegación web por decisión de la doctora.
+
 ## Contexto para desarrollo
 
 Antes de implementar funcionalidades, revisa [el contexto operativo](docs/frontend-context.md) y [las decisiones del frontend](docs/frontend-decisions.md). El código no debe adelantarse a contratos reales del backend ni rellenarse con datos simulados.

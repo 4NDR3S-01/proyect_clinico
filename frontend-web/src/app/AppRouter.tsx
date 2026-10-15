@@ -17,13 +17,14 @@ const ActivitiesPage = lazy(() => import('../features/activities/ActivitiesPage'
 const CashPage = lazy(() => import('../features/cash/CashPage').then((module) => ({ default: module.CashPage })))
 const PatientsPage = lazy(() => import('../features/patients/PatientsPage').then((module) => ({ default: module.PatientsPage })))
 const PatientWorkspace = lazy(() => import('../features/patients/PatientWorkspace').then((module) => ({ default: module.PatientWorkspace })))
-const PatientSection = lazy(() => import('../features/patients/PatientWorkspace').then((module) => ({ default: module.PatientSection })))
+const PatientDiagnosisSection = lazy(() => import('../features/patients/PatientDiagnosisSection').then((module) => ({ default: module.PatientDiagnosisSection })))
 const ClinicalHistorySection = lazy(() => import('../features/clinical-history/ClinicalHistorySection').then((module) => ({ default: module.ClinicalHistorySection })))
 const PatientEvidenceSection = lazy(() => import('../features/evidence/PatientEvidenceSection').then((module) => ({ default: module.PatientEvidenceSection })))
 const UsersPage = lazy(() => import('../features/assistant/UsersPage').then((module) => ({ default: module.UsersPage })))
 const SystemActivityPage = lazy(() => import('../features/audit/SystemActivityPage').then((module) => ({ default: module.SystemActivityPage })))
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const CatalogPage = lazy(() => import('../features/catalog/CatalogPage').then((module) => ({ default: module.CatalogPage })))
+const ProfilePage = lazy(() => import('../features/auth/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 
 function ProtectedRouteContent() {
   return <Suspense fallback={<LoadingState/>}><Outlet/></Suspense>
@@ -87,6 +88,7 @@ export function AppRouter() {
       <Route element={<ProtectedArea/>}>
         <Route element={<ProtectedRouteContent/>}>
         <Route element={<DashboardPage/>} index/>
+        <Route element={<ProfilePage/>} path="mi-perfil"/>
         <Route element={<RestrictedRoute area="agenda"/>}>
           <Route element={<AgendaPage/>} path="agenda"/>
           <Route element={<MedicalAppointmentsPage/>} path="citas-medicas"/>
@@ -100,15 +102,13 @@ export function AppRouter() {
         <Route element={<RestrictedRoute area="pacientes"/>}>
           <Route element={<PatientsPage/>} path="pacientes"/>
           <Route element={<PatientWorkspace/>} path="pacientes/:patientId">
-            <Route element={<Navigate replace to="resumen"/>} index/>
-            <Route element={<PatientSection title="Resumen"/>} path="resumen"/>
+            <Route element={<Navigate replace to="historial"/>} index/>
+            <Route element={<Navigate replace to="../historial"/>} path="resumen"/>
             <Route element={<ClinicalHistorySection/>} path="historial"/>
-            <Route element={<PatientSection title="Diagnósticos"/>} path="diagnosticos"/>
-            <Route element={<PatientSection title="Tratamientos"/>} path="tratamientos"/>
-            <Route element={<PatientSection title="Odontograma"/>} path="odontograma"/>
+            <Route element={<PatientDiagnosisSection/>} path="diagnosticos"/>
+            <Route element={<Navigate replace to="../diagnosticos?apartado=tratamientos"/>} path="tratamientos"/>
+            <Route element={<Navigate replace to="../diagnosticos?apartado=odontograma"/>} path="odontograma"/>
             <Route element={<PatientEvidenceSection/>} path="radiografias"/>
-            <Route element={<PatientSection title="Recetas"/>} path="recetas"/>
-            <Route element={<PatientSection title="Planes y presupuestos"/>} path="planes"/>
           </Route>
         </Route>
         <Route element={<RestrictedRoute area="reportes"/>}>

@@ -6,6 +6,7 @@ import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
 import { useAuth } from '../auth/authContext'
 import type { Patient } from '../patients/patientService'
+import { PatientFacts } from '../patients/PatientFacts'
 import { ClinicalHistoryForm } from './ClinicalHistoryForm'
 import { createClinicalHistory, getClinicalHistoryByPatient, updateClinicalHistory, type ClinicalHistory, type ClinicalHistoryFields } from './clinicalHistoryService'
 
@@ -96,11 +97,12 @@ export function ClinicalHistorySection() {
     }
   }
 
-  if (state.kind === 'loading') return <section aria-label="Historial clínico"><LoadingState/></section>
-  if (state.kind === 'error') return <section aria-label="Historial clínico"><ErrorState description={state.message} onRetry={() => { setState({ kind: 'loading' }); void load() }}/></section>
+  const general = <section aria-labelledby="patient-general-title" className="admin-surface rounded-[20px] p-6 sm:p-8"><p className="admin-kicker">Información registrada</p><h2 className="mt-2 text-xl font-semibold text-ink-950" id="patient-general-title">Datos generales del paciente</h2><div className="mt-4"><PatientFacts patient={patient}/></div></section>
+  if (state.kind === 'loading') return <div className="space-y-5">{general}<section aria-label="Historial clínico"><LoadingState/></section></div>
+  if (state.kind === 'error') return <div className="space-y-5">{general}<section aria-label="Historial clínico"><ErrorState description={state.message} onRetry={() => { setState({ kind: 'loading' }); void load() }}/></section></div>
 
   return (
-    <section aria-labelledby="clinical-history-title" className="admin-surface rounded-[20px] p-6 sm:p-8">
+    <div className="space-y-5">{general}<section aria-labelledby="clinical-history-title" className="admin-surface rounded-[20px] p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div><p className="admin-kicker">Ficha médica</p><h2 className="mt-1 text-xl font-semibold text-ink-950" id="clinical-history-title">Historial clínico</h2></div>
         {state.kind === 'ready' && canWrite && !editing ? (
@@ -122,6 +124,6 @@ export function ClinicalHistorySection() {
           <div className="space-y-6"><section className="admin-history-block rounded-[14px] p-4 sm:p-5"><h3 className="text-sm font-bold uppercase tracking-wide text-[#1559a2]">Antecedentes de enfermedades</h3><p className="mt-3 whitespace-pre-wrap break-words leading-7 text-ink-950">{state.history.antecedentes_enfermedades ?? 'No registrado'}</p></section><div className="grid gap-4 sm:grid-cols-2"><section className="admin-history-block rounded-[14px] p-4 sm:p-5"><h3 className="text-sm font-bold uppercase tracking-wide text-[#1559a2]">Cirugías</h3><p className="mt-3 whitespace-pre-wrap break-words leading-7 text-ink-950">{state.history.cirugias ?? 'No registrado'}</p></section><section className="admin-history-block rounded-[14px] p-4 sm:p-5"><h3 className="text-sm font-bold uppercase tracking-wide text-[#1559a2]">Medicación actual</h3><p className="mt-3 whitespace-pre-wrap break-words leading-7 text-ink-950">{state.history.medicacion_actual ?? 'No registrado'}</p></section></div></div>
         </div>
       )}
-    </section>
+    </section></div>
   )
 }

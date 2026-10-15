@@ -1,20 +1,18 @@
 import { isAxiosError } from 'axios'
 import { ArrowLeft, FileText } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, Navigate, NavLink, Outlet, useOutletContext, useParams } from 'react-router-dom'
+import { Link, Navigate, NavLink, Outlet, useParams } from 'react-router-dom'
 import { ZodError } from 'zod'
 import { ErrorState } from '../../components/states/ErrorState'
-import { IntegrationPending } from '../../components/states/IntegrationPending'
 import { LoadingState } from '../../components/states/LoadingState'
 import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
 import { useAuth } from '../auth/authContext'
-import { canAccessArea } from '../auth/roleAccess'
+import { ProtectedPhoto } from '../auth/ProtectedPhoto'
 import { PatientEditForm } from './PatientEditForm'
-import { PatientFacts } from './PatientFacts'
 import { getPatient, updatePatient, type Patient, type UpdatePatientPayload } from './patientService'
 import { patientLoadError } from './patientLoadError'
 
-const sections = [['resumen', 'Resumen'], ['historial', 'Historial'], ['diagnosticos', 'Diagnósticos'], ['tratamientos', 'Tratamientos'], ['odontograma', 'Odontograma'], ['radiografias', 'Evidencias clínicas'], ['recetas', 'Recetas'], ['planes', 'Planes / presupuestos']]
+const sections = [['historial', 'Historial clínico'], ['diagnosticos', 'Diagnósticos'], ['radiografias', 'Evidencias clínicas']]
 type PatientState = { kind: 'loading' } | { kind: 'ready'; patient: Patient } | { kind: 'missing' } | { kind: 'error'; message: string }
 
 function PatientDetail({ patientId }: { patientId: string }) {
@@ -95,15 +93,10 @@ function PatientDetail({ patientId }: { patientId: string }) {
       <div className="admin-surface-raised overflow-hidden rounded-[22px]">
         <div className="admin-record-hero p-6 sm:p-8">
           <div className="flex flex-wrap items-center gap-4 sm:gap-5">
-            <span aria-hidden="true" className="admin-record-avatar grid size-14 shrink-0 place-items-center rounded-[16px] text-xl font-bold sm:size-[74px] sm:rounded-[18px] sm:text-2xl">{state.patient.nombres.trim().charAt(0).toLocaleUpperCase('es')}</span>
-            <div className="min-w-[170px] flex-1"><p className="admin-kicker">Expediente clínico</p><h1 className="mt-1 break-words text-[22px] font-bold tracking-tight text-white sm:text-[32px]">{state.patient.nombres}</h1><p className="mt-2 break-words text-sm text-sky-100/80">Código {state.patient.codigo_paciente}</p></div>
+            <ProtectedPhoto className="admin-record-avatar size-14 rounded-[16px] text-xl font-bold sm:size-[74px] sm:rounded-[18px] sm:text-2xl" name={state.patient.nombres} photoUrl={state.patient.foto_perfil_url}/>
+            <div className="min-w-[170px] flex-1"><p className="admin-kicker">Expediente clínico</p><h1 className="mt-1 break-words text-[22px] font-bold tracking-tight text-white sm:text-[32px]">{state.patient.nombres}</h1></div>
             <div className="flex flex-wrap items-center gap-2"><span className="admin-record-badge rounded-full px-3 py-1.5 text-xs font-semibold"><FileText aria-hidden="true" className="mr-1 inline" size={14}/>Expediente</span>{user?.role === 'doctora' || user?.role === 'asistente' ? <button className="min-h-11 rounded-[10px] border border-sky-200/50 px-4 text-sm font-semibold text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => { setEditError(null); setSuccess(null); setEditing(true) }} ref={editTrigger} type="button">Editar datos</button> : null}</div>
           </div>
-          <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-sky-200/20 pt-5 lg:grid-cols-3">
-            <div><dt className="text-[11px] font-bold uppercase tracking-wider text-sky-200/75">Cédula</dt><dd className="mt-1 break-words text-sm font-semibold text-white">{state.patient.cedula}</dd></div>
-            <div><dt className="text-[11px] font-bold uppercase tracking-wider text-sky-200/75">Teléfono</dt><dd className="mt-1 break-words text-sm font-semibold text-white">{state.patient.telefono ?? 'No registrado'}</dd></div>
-            <div><dt className="text-[11px] font-bold uppercase tracking-wider text-sky-200/75">Dirección</dt><dd className="mt-1 break-words text-sm font-semibold text-white">{state.patient.direccion ?? 'No registrada'}</dd></div>
-          </dl>
         </div>
         <nav aria-label="Secciones del expediente" className="flex min-w-0 gap-1 overflow-x-auto bg-white px-3 sm:px-6">
           {sections.map(([path, label]) => <NavLink className="admin-tab shrink-0 px-3 py-4 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-[-3px]" key={path} to={path}>{label}</NavLink>)}
@@ -118,17 +111,4 @@ export function PatientWorkspace() {
   const { patientId } = useParams()
   if (!patientId) return <Navigate replace to="/pacientes"/>
   return <PatientDetail key={patientId} patientId={patientId}/>
-}
-
-export function PatientSection({ title }: { title: string }) {
-  const patient = useOutletContext<Patient>()
-  const { user } = useAuth()
-  if (title === 'Resumen') return <section className="admin-surface rounded-[20px] p-6 sm:p-8"><p className="admin-kicker">Información registrada</p><h2 className="mt-2 text-xl font-semibold text-ink-950">Datos del paciente</h2><div className="mt-5"><PatientFacts patient={patient}/></div></section>
-  const clinicalSection = title === 'Diagnósticos' || title === 'Tratamientos'
-  const detail = title === 'Odontograma'
-    ? 'El backend expone datos del odontograma, pero su estructura interna aún no está definida para esta vista.'
-    : clinicalSection
-      ? `Los ${title.toLowerCase()} actualmente se registran dentro de cada cita médica. Esta vista independiente sigue pendiente de contrato.`
-      : `La información de ${title.toLowerCase()} se cargará desde los servicios reales del backend.`
-  return <section className="admin-surface rounded-[20px] p-6 sm:p-8"><span className="admin-pill admin-pill-pending">En preparación</span><h2 className="mt-4 text-xl font-semibold text-ink-950">{title}</h2><div className="mt-5"><IntegrationPending detail={detail}/></div>{clinicalSection && canAccessArea(user?.role, 'agenda') ? <Link className="admin-secondary mt-5 inline-flex min-h-11 items-center rounded-[10px] px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2" to="/citas-medicas">Ir a Citas médicas</Link> : null}</section>
 }

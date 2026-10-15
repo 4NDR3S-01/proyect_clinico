@@ -6,6 +6,7 @@ const authUserSchema = z.object({
   id: z.string(),
   name: z.string(),
   username: z.string(),
+  email: z.string().nullable().optional(),
   role: z.enum(['doctora', 'asistente', 'paciente']),
   paciente_id: z.string().nullable(),
   activo: z.boolean(),

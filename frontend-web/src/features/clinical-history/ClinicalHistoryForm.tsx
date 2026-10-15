@@ -57,7 +57,7 @@ export function ClinicalHistoryForm({ initial, error, onSave, onCancel }: {
       {multiline ? (
         <textarea aria-describedby={errors[name] ? `history-${name}-error` : undefined} aria-invalid={Boolean(errors[name])} className={`${controlClass} min-h-28 resize-y`} id={`history-${name}`} rows={4} {...register(name)}/>
       ) : (
-        <input aria-describedby={errors[name] ? `history-${name}-error` : undefined} aria-invalid={Boolean(errors[name])} autoFocus={name === 'sexo'} className={controlClass} id={`history-${name}`} type="text" {...register(name)}/>
+        <input aria-describedby={errors[name] ? `history-${name}-error` : undefined} aria-invalid={Boolean(errors[name])} autoFocus={name === 'sexo' && Boolean(initial)} className={controlClass} id={`history-${name}`} type="text" {...register(name)}/>
       )}
       {errors[name] ? <p className="mt-1 text-sm text-red-700" id={`history-${name}-error`}>{errors[name]?.message}</p> : null}
     </div>

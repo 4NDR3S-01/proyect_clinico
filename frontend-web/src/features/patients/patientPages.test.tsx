@@ -1,13 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientsPage } from './PatientsPage'
-import { PatientSection, PatientWorkspace } from './PatientWorkspace'
+import { PatientWorkspace } from './PatientWorkspace'
+import { PatientDiagnosisSection } from './PatientDiagnosisSection'
+import { ClinicalHistorySection } from '../clinical-history/ClinicalHistorySection'
 import { createPatient, getPatient, getPatients, updatePatient } from './patientService'
 import { AuthContext } from '../auth/authContext'
 import type { UserRole } from '../auth/authService'
 
 vi.mock('./patientService', () => ({ getPatients: vi.fn(), getPatient: vi.fn(), createPatient: vi.fn(), updatePatient: vi.fn() }))
+vi.mock('../clinical-history/clinicalHistoryService', () => ({ getClinicalHistoryByPatient: vi.fn(() => Promise.reject({ isAxiosError: true, response: { status: 404 } })) }))
 
 const patient = { id: 'patient-id', codigo_paciente: '001', nombres: 'Nombre recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: '1990-01-01' }
 const pageOf = (data: typeof patient[], current_page = 1, last_page = 1) => ({ data, current_page, last_page, per_page: 20, total: data.length, next_page_url: current_page < last_page ? '/pacientes?page=2' : null, prev_page_url: current_page > 1 ? '/pacientes?page=1' : null })
@@ -15,8 +18,8 @@ const httpError = (status: number, message: string) => ({ isAxiosError: true, re
 
 beforeEach(() => vi.resetAllMocks())
 
-function renderDetail(path = '/pacientes/patient-id/resumen', role: UserRole = 'doctora') {
-  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><MemoryRouter initialEntries={[path]}><Routes><Route element={<PatientWorkspace/>} path="/pacientes/:patientId"><Route element={<PatientSection title="Resumen"/>} path="resumen"/><Route element={<PatientSection title="Historial clínico"/>} path="historial"/><Route element={<PatientSection title="Diagnósticos"/>} path="diagnosticos"/><Route element={<PatientSection title="Tratamientos"/>} path="tratamientos"/></Route></Routes></MemoryRouter></AuthContext.Provider>)
+function renderDetail(path = '/pacientes/patient-id/historial', role: UserRole = 'doctora') {
+  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><MemoryRouter initialEntries={[path]}><Routes><Route element={<PatientWorkspace/>} path="/pacientes/:patientId"><Route element={<Navigate replace to="historial"/>} index/><Route element={<Navigate replace to="../historial"/>} path="resumen"/><Route element={<ClinicalHistorySection/>} path="historial"/><Route element={<PatientDiagnosisSection/>} path="diagnosticos"/><Route element={<Navigate replace to="../diagnosticos?apartado=tratamientos"/>} path="tratamientos"/><Route element={<Navigate replace to="../diagnosticos?apartado=odontograma"/>} path="odontograma"/></Route></Routes></MemoryRouter></AuthContext.Provider>)
 }
 
 describe('patient views', () => {
@@ -27,7 +30,7 @@ describe('patient views', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Cargando información')
     expect(screen.getByRole('searchbox', { name: 'Buscar pacientes' })).toBeInTheDocument()
     resolve(pageOf([patient]))
-    expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toHaveAttribute('href', '/pacientes/patient-id/resumen')
+    expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toHaveAttribute('href', '/pacientes/patient-id/historial')
     expect(screen.getByText('Cédula: 0912345678')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Registrar paciente' })).toBeEnabled()
   })
@@ -159,7 +162,7 @@ describe('patient views', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: query } })
     await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: query, page: 1 }))
     expect(await screen.findByRole('link', { name: /Cédula:/ })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Cédula:/ })).toHaveAttribute('href', `/pacientes/${expectedId}/resumen`)
+    expect(screen.getByRole('link', { name: /Cédula:/ })).toHaveAttribute('href', `/pacientes/${expectedId}/historial`)
     expect(getPatients).toHaveBeenCalledTimes(2)
   })
 
@@ -183,43 +186,64 @@ describe('patient views', () => {
     expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled()
   })
 
-  it('loads a real patient detail and leaves clinical tabs pending', async () => {
+  it('loads a real patient detail with exactly three main sections', async () => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail('/pacientes/patient-id/historial')
     expect(screen.getByRole('status')).toHaveTextContent('Cargando información')
     expect(await screen.findByRole('heading', { name: 'Nombre recibido' })).toBeInTheDocument()
     expect(getPatient).toHaveBeenCalledWith('patient-id')
-    expect(screen.getByRole('status')).toHaveTextContent('Integración pendiente')
+    const tabs = screen.getByRole('navigation', { name: 'Secciones del expediente' })
+    expect(within(tabs).getAllByRole('link')).toHaveLength(3)
+    expect(within(tabs).getByRole('link', { name: 'Historial clínico' })).toBeInTheDocument()
+    expect(within(tabs).getByRole('link', { name: 'Diagnósticos' })).toBeInTheDocument()
+    expect(within(tabs).getByRole('link', { name: 'Evidencias clínicas' })).toBeInTheDocument()
+    expect(within(tabs).queryByText(/Recetas|Planes|Tratamientos|Odontograma|Resumen/)).not.toBeInTheDocument()
+  })
+
+  it('keeps Tratamientos and Odontograma inside Diagnósticos, including legacy links', async () => {
+    vi.mocked(getPatient).mockResolvedValue(patient)
+    renderDetail('/pacientes/patient-id/tratamientos')
+    expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Tratamientos' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Odontograma' }))
+    expect(screen.getByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent('estructura clínica')
+    expect(within(screen.getByRole('navigation', { name: 'Secciones del expediente' })).getAllByRole('link')).toHaveLength(3)
+  })
+
+  it('redirects the old Resumen route into Historial clínico', async () => {
+    vi.mocked(getPatient).mockResolvedValue(patient)
+    renderDetail('/pacientes/patient-id/resumen')
+    expect(await screen.findByRole('heading', { name: 'Datos generales del paciente' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Historial clínico' })).toHaveAttribute('aria-current', 'page')
   })
 
   it.each([
-    ['doctora', 'diagnosticos', 'Diagnósticos', true],
-    ['doctora', 'tratamientos', 'Tratamientos', true],
-    ['asistente', 'diagnosticos', 'Diagnósticos', false],
-    ['asistente', 'tratamientos', 'Tratamientos', false],
-  ] as const)('keeps %s %s pending and only offers the authorized Citas médicas route', async (role, path, title, canOpenAppointments) => {
+    ['doctora', 'diagnosticos', true],
+    ['asistente', 'diagnosticos', false],
+  ] as const)('keeps %s %s pending and only offers the authorized Citas médicas route', async (role, path, canOpenAppointments) => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail(`/pacientes/patient-id/${path}`, role)
-    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
-    expect(screen.getByText('En preparación')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent(`Los ${title.toLowerCase()} actualmente se registran dentro de cada cita médica.`)
+    expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Integración pendiente')
     const action = screen.queryByRole('link', { name: 'Ir a Citas médicas' })
     if (canOpenAppointments) expect(action).toHaveAttribute('href', '/citas-medicas')
     else expect(action).not.toBeInTheDocument()
   })
 
-  it('shows confirmed basic fields on the patient summary', async () => {
+  it('shows confirmed basic fields within clinical history', async () => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail()
-    expect(await screen.findByRole('heading', { name: 'Datos del paciente' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Datos generales del paciente' })).toBeInTheDocument()
     expect(screen.getByText('001')).toBeInTheDocument()
     expect(screen.getAllByText('No registrado').length).toBeGreaterThan(0)
   })
 
-  it('shows only the six real summary fields and formats the received birth date', async () => {
+  it('shows only the six real general fields and formats the received birth date', async () => {
     vi.mocked(getPatient).mockResolvedValue({ ...patient, telefono: '0991234567', direccion: 'Dirección recibida' })
     renderDetail()
-    const summary = await screen.findByRole('heading', { name: 'Datos del paciente' })
+    const summary = await screen.findByRole('heading', { name: 'Datos generales del paciente' })
     const facts = summary.parentElement?.querySelector('dl')
     expect(facts?.querySelectorAll('dt')).toHaveLength(6)
     expect(facts).toHaveTextContent('001')
@@ -233,7 +257,7 @@ describe('patient views', () => {
   it('represents nullable summary fields without inventing values', async () => {
     vi.mocked(getPatient).mockResolvedValue({ ...patient, fecha_nacimiento: null })
     renderDetail()
-    const summary = await screen.findByRole('heading', { name: 'Datos del paciente' })
+    const summary = await screen.findByRole('heading', { name: 'Datos generales del paciente' })
     const facts = summary.parentElement?.querySelector('dl')
     expect(facts?.querySelectorAll('dt')).toHaveLength(6)
     expect(facts).toHaveTextContent('TeléfonoNo registrado')

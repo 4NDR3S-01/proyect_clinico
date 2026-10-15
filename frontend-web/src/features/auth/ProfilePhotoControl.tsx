@@ -15,9 +15,9 @@ function errorMessage(error: unknown): string {
   return 'No fue posible actualizar la foto de perfil.'
 }
 
-export function ProfilePhotoControl() {
+export function ProfilePhotoControl({ initialPhotoUrl }: { initialPhotoUrl?: string | null } = {}) {
   const { user } = useAuth()
-  const [photoUrl, setPhotoUrl] = useState<string | null>(user?.foto_perfil_url ?? null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(initialPhotoUrl === undefined ? user?.foto_perfil_url ?? null : initialPhotoUrl)
   const [revision, setRevision] = useState(0)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -47,14 +47,14 @@ export function ProfilePhotoControl() {
     if (!file || pending.current) return
     if (!allowedTypes.has(file.type) || file.size > 5 * 1024 * 1024) { setError('Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.'); return }
     pending.current = true; setBusy(true); setError(null)
-    try { setPhotoUrl(await uploadProfilePhoto(file)); setRevision((value) => value + 1); setOpen(false); trigger.current?.focus() }
+    try { const next = await uploadProfilePhoto(file); setPhotoUrl(next); setRevision((value) => value + 1); window.dispatchEvent(new CustomEvent('clinic:profile-photo-changed', { detail: next })); setOpen(false); trigger.current?.focus() }
     catch (cause) { setError(errorMessage(cause)) }
     finally { pending.current = false; setBusy(false) }
   }
   const remove = async () => {
     if (pending.current) return
     pending.current = true; setBusy(true); setError(null)
-    try { setPhotoUrl(await deleteProfilePhoto()); setBlobUrl(null); setOpen(false); trigger.current?.focus() }
+    try { const next = await deleteProfilePhoto(); setPhotoUrl(next); setBlobUrl(null); window.dispatchEvent(new CustomEvent('clinic:profile-photo-changed', { detail: next })); setOpen(false); trigger.current?.focus() }
     catch (cause) { setError(errorMessage(cause)) }
     finally { pending.current = false; setBusy(false) }
   }

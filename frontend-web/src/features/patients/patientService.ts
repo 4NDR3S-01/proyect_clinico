@@ -9,6 +9,7 @@ const patientProfileSchema = z.object({
   telefono: z.string().nullable(),
   direccion: z.string().nullable(),
   fecha_nacimiento: z.string().nullable(),
+  foto_perfil_url: z.string().nullable().optional(),
 })
 const patientSchema = patientProfileSchema.extend({ id: z.string() })
 const patientPageSchema = paginatedSchema(patientSchema)

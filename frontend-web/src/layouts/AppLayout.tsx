@@ -1,10 +1,10 @@
-import { BarChart3, CalendarClock, CalendarDays, ClipboardList, LayoutDashboard, LogOut, Menu, Settings, UserRound, UsersRound, Wallet, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, CalendarClock, CalendarDays, ChevronDown, ClipboardList, LayoutDashboard, LogOut, Menu, Settings, UserRound, UsersRound, Wallet, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/authContext'
 import type { UserRole } from '../features/auth/authService'
 import { canAccessArea, type RestrictedArea } from '../features/auth/roleAccess'
-import { ProfilePhotoControl } from '../features/auth/ProfilePhotoControl'
+import { ProtectedPhoto } from '../features/auth/ProtectedPhoto'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; access?: RestrictedArea }
 
@@ -23,7 +23,7 @@ const navItems: NavItem[] = [
 const roleLabels: Record<UserRole, string> = { doctora: 'Doctora', asistente: 'Asistente', paciente: 'Paciente' }
 
 function Sidebar({ close }: { close?: () => void }) {
-  const { logout, user } = useAuth()
+  const { user } = useAuth()
   const visibleItems = navItems.filter(({ access }) => !access || canAccessArea(user?.role, access))
 
   return (
@@ -56,26 +56,58 @@ function Sidebar({ close }: { close?: () => void }) {
         ))}
       </nav>
 
-      <div className="mt-auto border-t border-sky-200/15 pt-4">
-        {user ? <div className="mb-3 flex min-w-0 items-center gap-3 px-2 py-2">
-          <span aria-hidden="true" className="admin-avatar size-10 rounded-full">{user.name.trim().charAt(0).toLocaleUpperCase('es')}</span>
-          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-white" title={user.name}>{user.name}</span><span className="block text-xs text-sky-200/75">{roleLabels[user.role]}</span></span>
-        </div> : null}
-        <button className="admin-nav-link flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-[13px] font-medium text-sky-100/75 hover:bg-white/8 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => { close?.(); void logout() }} type="button">
-          <LogOut aria-hidden="true" size={18}/>Cerrar sesión
-        </button>
-      </div>
     </div>
   )
 }
 
 export function AppLayout() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [open, setOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [logoutBusy, setLogoutBusy] = useState(false)
+  const [photoUrl, setPhotoUrl] = useState(user?.foto_perfil_url ?? null)
+  const [photoRevision, setPhotoRevision] = useState(0)
+  const logoutPending = useRef(false)
+  const profileTrigger = useRef<HTMLButtonElement>(null)
+  const profileMenu = useRef<HTMLDivElement>(null)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
-  const title = location.pathname === '/servicios' ? 'Servicios del consultorio' : navItems.find((item) => item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))?.label ?? 'Expediente clínico'
+  const title = location.pathname === '/mi-perfil' ? 'Mi perfil' : location.pathname === '/servicios' ? 'Servicios del consultorio' : navItems.find((item) => item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))?.label ?? 'Expediente clínico'
+
+  useEffect(() => {
+    const onPhoto = (event: Event) => { setPhotoUrl((event as CustomEvent<string | null>).detail); setPhotoRevision((value) => value + 1) }
+    window.addEventListener('clinic:profile-photo-changed', onPhoto)
+    return () => window.removeEventListener('clinic:profile-photo-changed', onPhoto)
+  }, [])
+
+  useEffect(() => {
+    if (!profileOpen) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setProfileOpen(false); profileTrigger.current?.focus(); return }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+      const items = [...(profileMenu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
+      if (!items.length || !(profileMenu.current?.contains(document.activeElement) || document.activeElement === profileTrigger.current)) return
+      event.preventDefault()
+      const current = items.indexOf(document.activeElement as HTMLElement)
+      const next = event.key === 'ArrowDown' ? (current + 1) % items.length : (current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length)
+      items[next].focus()
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || profileMenu.current?.contains(event.target) || profileTrigger.current?.contains(event.target)) return
+      setProfileOpen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown) }
+  }, [profileOpen])
+
+  const signOut = async () => {
+    if (logoutPending.current) return
+    logoutPending.current = true
+    setLogoutBusy(true)
+    try { await logout() } finally { logoutPending.current = false; setLogoutBusy(false); setProfileOpen(false) }
+  }
 
   const closeMenu = () => {
     setOpen(false)
@@ -127,18 +159,20 @@ export function AppLayout() {
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-3 pl-3">
             <span aria-hidden="true" className="h-7 w-px bg-[#d5e3f0]"/>
-            {user ? (
-              <div className="flex min-w-0 items-center gap-2 text-slate-600">
-                <ProfilePhotoControl key={user.id}/>
-                <span className="flex min-w-0 flex-col text-sm leading-tight">
-                  <span className="max-w-[7rem] truncate font-medium text-ink-950 sm:max-w-[12rem]" title={user.name}>{user.name}</span>
-                  <span className="text-xs text-slate-500">{roleLabels[user.role]}</span>
-                </span>
-              </div>
-            ) : null}
+            {user ? <div className="relative">
+              <button aria-controls="profile-menu" aria-expanded={profileOpen} aria-haspopup="menu" aria-label="Abrir menú de perfil" className="admin-interactive flex min-h-11 items-center gap-2 rounded-lg px-1 text-slate-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600" onClick={() => setProfileOpen((value) => !value)} onKeyDown={(event) => { if (event.key === 'ArrowDown' && !profileOpen) { event.preventDefault(); setProfileOpen(true); requestAnimationFrame(() => profileMenu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()) } }} ref={profileTrigger} type="button">
+                <ProtectedPhoto className="size-10 rounded-full text-sm font-semibold" key={`${user.id}-${photoRevision}`} name={user.name} photoUrl={photoUrl}/>
+                <span className="hidden min-w-0 flex-col text-left text-sm leading-tight sm:flex"><span className="max-w-[12rem] truncate font-medium text-ink-950" title={user.name}>{user.name}</span><span className="text-xs text-slate-500">{roleLabels[user.role]}</span></span><ChevronDown aria-hidden="true" size={16}/>
+              </button>
+              {profileOpen ? <div className="admin-surface-raised absolute right-0 top-full z-30 mt-2 w-[min(19rem,calc(100vw-2rem))] rounded-xl border border-[#dbe6f2] p-2 shadow-lg" id="profile-menu" ref={profileMenu} role="menu">
+                <div className="flex min-w-0 items-center gap-3 border-b border-[#e6edf6] px-3 py-3"><ProtectedPhoto className="size-11 rounded-full text-sm font-semibold" name={user.name} photoUrl={photoUrl}/><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink-950">{user.name}</p><p className="text-xs text-slate-500">{roleLabels[user.role]}</p></div></div>
+                <Link className="admin-interactive mt-1 flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink-950 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600" onClick={() => setProfileOpen(false)} role="menuitem" to="/mi-perfil"><UserRound aria-hidden="true" size={17}/>Mi perfil</Link>
+                <button className="admin-interactive flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-ink-950 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600 disabled:opacity-60" disabled={logoutBusy} onClick={() => { void signOut() }} role="menuitem" type="button"><LogOut aria-hidden="true" size={17}/>{logoutBusy ? 'Cerrando sesión…' : 'Cerrar sesión'}</button>
+              </div> : null}
+            </div> : null}
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1536px] p-4 sm:p-7 lg:px-10 lg:py-9"><Outlet/></main>
+        <main className="mx-auto w-full max-w-[1536px] p-4 sm:p-7 lg:px-10 lg:py-9"><Outlet context={photoUrl}/></main>
       </div>
     </div>
   )
