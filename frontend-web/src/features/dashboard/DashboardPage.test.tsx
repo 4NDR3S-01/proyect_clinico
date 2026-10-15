@@ -5,13 +5,13 @@ import { AuthContext } from '../auth/authContext'
 import type { UserRole } from '../auth/authService'
 import { getActivities } from '../activities/activityService'
 import { getAgendaMonth, getPendingRequests, type AgendaEntry } from '../agenda/agendaService'
-import { getCashSummary } from '../cash/cashService'
 import { getPatients } from '../patients/patientService'
+import { getDashboardReport } from '../reports/reportService'
 import { DashboardPage } from './DashboardPage'
 
 vi.mock('../agenda/agendaService', () => ({ getAgendaMonth: vi.fn(), getPendingRequests: vi.fn() }))
 vi.mock('../patients/patientService', () => ({ getPatients: vi.fn() }))
-vi.mock('../cash/cashService', () => ({ getCashSummary: vi.fn() }))
+vi.mock('../reports/reportService', () => ({ getDashboardReport: vi.fn() }))
 vi.mock('../activities/activityService', () => ({ getActivities: vi.fn() }))
 
 const now = new Date()
@@ -24,13 +24,15 @@ const appointment: AgendaEntry = {
 }
 const patient = { id: 'patient-1', codigo_paciente: 'P-1', nombres: 'Paciente recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: null }
 const activity = { id: 'activity-1', paciente_id: 'patient-1', fecha: today, actividad: 'Actividad recibida', precio: '25.00', paciente: { codigo_paciente: 'P-1', nombres: 'Paciente recibido' } }
+const pageOf = (data: typeof patient[]) => ({ data, current_page: 1, last_page: 1, per_page: 20, total: data.length, next_page_url: null, prev_page_url: null })
+const report = { pacientes: { total: 0 }, citas: { hoy: 0, solicitudes_pendientes: 0 }, mes_actual: { ingresos: '0.00', egresos: '0.00', saldo: '0.00' } }
 
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(getAgendaMonth).mockResolvedValue([])
   vi.mocked(getPendingRequests).mockResolvedValue([])
-  vi.mocked(getPatients).mockResolvedValue([])
-  vi.mocked(getCashSummary).mockResolvedValue({ periodo: 'mes', ingresos: '0.00', egresos: '0.00', saldo: '0.00' })
+  vi.mocked(getPatients).mockResolvedValue(pageOf([]))
+  vi.mocked(getDashboardReport).mockResolvedValue(report)
   vi.mocked(getActivities).mockResolvedValue([])
 })
 
@@ -70,8 +72,7 @@ describe('DashboardPage', () => {
       { ...appointment, id: 'personal-1', tipo: 'personal' },
     ])
     vi.mocked(getPendingRequests).mockResolvedValue([{ ...appointment, id: 'request-1', fecha: null, hora_inicio: null, hora_fin: null, estado: 'pendiente' }])
-    vi.mocked(getPatients).mockResolvedValue([patient, { ...patient, id: 'patient-2' }])
-    vi.mocked(getCashSummary).mockResolvedValue({ periodo: 'mes', ingresos: '125.00', egresos: '25.00', saldo: '100.00' })
+    vi.mocked(getDashboardReport).mockResolvedValue({ pacientes: { total: 2 }, citas: { hoy: 1, solicitudes_pendientes: 1 }, mes_actual: { ingresos: '125.00', egresos: '25.00', saldo: '100.00' } })
     vi.mocked(getActivities).mockResolvedValue([activity, { ...activity, id: 'activity-2' }])
     renderDashboard('doctora')
 
@@ -87,19 +88,20 @@ describe('DashboardPage', () => {
     expect(rows[1]).toHaveTextContent('Paciente recibido')
     expect(within(screen.getByRole('region', { name: 'Solicitudes pendientes' })).getByText('Paciente recibido')).toBeInTheDocument()
     expect(getAgendaMonth).toHaveBeenCalledWith(now.getMonth() + 1, now.getFullYear())
-    expect(getCashSummary).toHaveBeenCalledWith({ periodo: 'mes', mes: now.getMonth() + 1, anio: now.getFullYear() })
+    expect(getDashboardReport).toHaveBeenCalledTimes(1)
+    expect(getPatients).not.toHaveBeenCalled()
     expect(getActivities).toHaveBeenCalledWith({ mes: now.getMonth() + 1, anio: now.getFullYear() })
     expect(screen.getByRole('link', { name: /Ver agenda completa/ })).toHaveAttribute('href', '/agenda')
   })
 
   it('does not request or show agenda and financial information to an assistant', async () => {
-    vi.mocked(getPatients).mockResolvedValue([patient])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([patient]))
     vi.mocked(getActivities).mockResolvedValue([activity])
     renderDashboard('asistente')
     expect(await within(screen.getByRole('region', { name: 'Pacientes registrados' })).findByText('1')).toBeInTheDocument()
     expect(getAgendaMonth).not.toHaveBeenCalled()
     expect(getPendingRequests).not.toHaveBeenCalled()
-    expect(getCashSummary).not.toHaveBeenCalled()
+    expect(getDashboardReport).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Ingresos y egresos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Abrir Ingresos y egresos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Agenda de hoy' })).not.toBeInTheDocument()
@@ -122,13 +124,13 @@ describe('DashboardPage', () => {
   })
 
   it('shows a safe error and retries a failed request', async () => {
-    vi.mocked(getPatients).mockRejectedValueOnce(new Error('internal detail')).mockResolvedValueOnce([patient])
+    vi.mocked(getDashboardReport).mockRejectedValueOnce(new Error('internal detail')).mockResolvedValueOnce({ ...report, pacientes: { total: 1 } })
     renderDashboard('doctora')
     const card = screen.getByRole('region', { name: 'Pacientes registrados' })
     expect(await within(card).findByRole('alert')).toHaveTextContent('No fue posible cargar esta información.')
     expect(card).not.toHaveTextContent('internal detail')
     fireEvent.click(within(card).getByRole('button', { name: 'Reintentar' }))
     await waitFor(() => expect(within(card).getByText('1')).toBeInTheDocument())
-    expect(getPatients).toHaveBeenCalledTimes(2)
+    expect(getDashboardReport).toHaveBeenCalledTimes(2)
   })
 })

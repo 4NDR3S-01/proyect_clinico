@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '../../services/apiClient'
+import { paginatedSchema } from '../../services/pagination'
 
 const patientProfileSchema = z.object({
   codigo_paciente: z.string(),
@@ -10,9 +11,11 @@ const patientProfileSchema = z.object({
   fecha_nacimiento: z.string().nullable(),
 })
 const patientSchema = patientProfileSchema.extend({ id: z.string() })
+const patientPageSchema = paginatedSchema(patientSchema)
 
 export type PatientProfile = z.infer<typeof patientProfileSchema>
 export type Patient = z.infer<typeof patientSchema>
+export type PatientPage = z.infer<typeof patientPageSchema>
 export type CreatePatientPayload = {
   nombres: string
   cedula: string
@@ -27,10 +30,10 @@ function requireApiBaseUrl(): void {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getPatients(): Promise<Patient[]> {
+export async function getPatients(params: { buscar?: string; page?: number } = {}): Promise<PatientPage> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/pacientes')
-  return z.object({ data: z.array(patientSchema) }).parse(data).data
+  const { data } = await apiClient.get<unknown>('/pacientes', { params })
+  return patientPageSchema.parse(data)
 }
 
 export async function getPatient(id: string): Promise<Patient> {

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { SystemActivityPage } from './SystemActivityPage'
 import { getRecordedActions, getRecordedSessions, hideRecordedAction } from './auditService'
 
@@ -10,7 +11,7 @@ beforeEach(() => { vi.resetAllMocks(); vi.mocked(getRecordedActions).mockResolve
 
 describe('SystemActivityPage', () => {
   it('loads actions, switches to sessions and filters by date', async () => {
-    render(<SystemActivityPage/>)
+    render(<MemoryRouter><SystemActivityPage/></MemoryRouter>)
     expect(await screen.findByText('agenda · crear')).toBeInTheDocument()
     expect(screen.getByText(/4 de octubre de 2026 · 10:00/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sesiones' }))
@@ -25,7 +26,7 @@ describe('SystemActivityPage', () => {
   it('confirms hiding an action and refetches the visible list', async () => {
     vi.mocked(hideRecordedAction).mockResolvedValue('Acción ocultada.')
     vi.mocked(getRecordedActions).mockResolvedValueOnce([action]).mockResolvedValueOnce([])
-    render(<SystemActivityPage/>)
+    render(<MemoryRouter><SystemActivityPage/></MemoryRouter>)
     fireEvent.click(await screen.findByRole('button', { name: 'Ocultar de la vista' }))
     expect(hideRecordedAction).not.toHaveBeenCalled()
     const dialog = screen.getByRole('dialog', { name: 'Ocultar acción de la vista' })

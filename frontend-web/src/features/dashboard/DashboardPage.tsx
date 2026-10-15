@@ -7,15 +7,15 @@ import { getActivities, type Activity } from '../activities/activityService'
 import { getAgendaMonth, getPendingRequests, type AgendaEntry } from '../agenda/agendaService'
 import { useAuth } from '../auth/authContext'
 import { canAccessArea } from '../auth/roleAccess'
-import { getCashSummary, type CashSummary } from '../cash/cashService'
-import { getPatients, type Patient } from '../patients/patientService'
+import { getPatients, type PatientPage } from '../patients/patientService'
+import { getDashboardReport, type DashboardReport } from '../reports/reportService'
 
 type DataState<T> = { kind: 'loading' } | { kind: 'ready'; data: T } | { kind: 'error'; message: string }
 type DashboardResults = {
   agenda: AgendaEntry[]
   pending: AgendaEntry[]
-  patients: Patient[]
-  cash: CashSummary
+  patients: PatientPage
+  report: DashboardReport
   activities: Activity[]
 }
 type DashboardData = { [K in keyof DashboardResults]: DataState<DashboardResults[K]> }
@@ -81,7 +81,7 @@ export function DashboardPage() {
   const canViewCash = canAccessArea(user?.role, 'caja')
   const [today] = useState(() => new Date())
   const [retry, setRetry] = useState(0)
-  const [data, setData] = useState<DashboardData>({ agenda: loading, pending: loading, patients: loading, cash: loading, activities: loading })
+  const [data, setData] = useState<DashboardData>({ agenda: loading, pending: loading, patients: loading, report: loading, activities: loading })
   const retryLoad = () => setRetry((value) => value + 1)
 
   useEffect(() => {
@@ -97,8 +97,8 @@ export function DashboardPage() {
       load('agenda', () => getAgendaMonth(today.getMonth() + 1, today.getFullYear()))
       load('pending', getPendingRequests)
     }
-    if (canViewPatients) load('patients', getPatients)
-    if (canViewCash) load('cash', () => getCashSummary({ periodo: 'mes', mes: today.getMonth() + 1, anio: today.getFullYear() }))
+    if (canViewPatients && !canViewCash) load('patients', () => getPatients())
+    if (canViewCash) load('report', getDashboardReport)
     if (canViewActivities) load('activities', () => getActivities({ mes: today.getMonth() + 1, anio: today.getFullYear() }))
     return () => { active = false }
   }, [canViewAgenda, canViewPatients, canViewCash, canViewActivities, retry, today])
@@ -106,7 +106,6 @@ export function DashboardPage() {
   const appointments = data.agenda.kind === 'ready'
     ? data.agenda.data.filter((entry) => entry.tipo === 'cita_medica' && entry.fecha?.slice(0, 10) === todayKey(today)).sort((a, b) => (a.hora_inicio ?? '').localeCompare(b.hora_inicio ?? ''))
     : []
-  const scheduledCount = appointments.filter((entry) => entry.estado === 'programada').length
   const pendingRequests = data.pending.kind === 'ready'
     ? data.pending.data.filter((entry) => entry.tipo === 'cita_medica' && entry.estado === 'pendiente')
     : []
@@ -123,9 +122,9 @@ export function DashboardPage() {
     <div className="dashboard-intro"><p className="dashboard-eyebrow">Panel clínico</p><h1>Resumen de gestión</h1><p>Consulta la actividad del consultorio y las tareas pendientes.</p></div>
 
     <div className="dashboard-metrics">
-      {canViewAgenda ? <MetricCard detail="Citas programadas para hoy" icon={CalendarDays} label="Citas médicas" onRetry={retryLoad} state={data.agenda} tag="Hoy" to="/citas-medicas" tone="blue" value={String(scheduledCount)}/> : null}
-      {canViewPatients ? <MetricCard detail="Pacientes registrados en el sistema" icon={UsersRound} label="Pacientes registrados" onRetry={retryLoad} state={data.patients} tag="Total" to="/pacientes" tone="cyan" value={data.patients.kind === 'ready' ? String(data.patients.data.length) : ''}/> : null}
-      {canViewCash ? <MetricCard detail="" icon={Wallet} label="Ingresos y egresos" onRetry={retryLoad} state={data.cash} tag="Este mes" to="/caja" tone="green" value={data.cash.kind === 'ready' ? formatCurrency(data.cash.data.saldo) : ''}>{data.cash.kind === 'ready' ? <p className="dashboard-metric-detail dashboard-money-line">Ingresos: {formatCurrency(data.cash.data.ingresos)} <span aria-hidden="true">|</span> Egresos: {formatCurrency(data.cash.data.egresos)}</p> : null}</MetricCard> : null}
+      {canViewAgenda ? <MetricCard detail="Citas programadas para hoy" icon={CalendarDays} label="Citas médicas" onRetry={retryLoad} state={data.report} tag="Hoy" to="/citas-medicas" tone="blue" value={data.report.kind === 'ready' ? String(data.report.data.citas.hoy) : ''}/> : null}
+      {canViewPatients ? <MetricCard detail="Pacientes registrados en el sistema" icon={UsersRound} label="Pacientes registrados" onRetry={retryLoad} state={canViewCash ? data.report : data.patients} tag="Total" to="/pacientes" tone="cyan" value={canViewCash ? data.report.kind === 'ready' ? String(data.report.data.pacientes.total) : '' : data.patients.kind === 'ready' ? String(data.patients.data.total) : ''}/> : null}
+      {canViewCash ? <MetricCard detail="" icon={Wallet} label="Ingresos y egresos" onRetry={retryLoad} state={data.report} tag="Este mes" to="/caja" tone="green" value={data.report.kind === 'ready' ? formatCurrency(data.report.data.mes_actual.saldo) : ''}>{data.report.kind === 'ready' ? <p className="dashboard-metric-detail dashboard-money-line">Ingresos: {formatCurrency(data.report.data.mes_actual.ingresos)} <span aria-hidden="true">|</span> Egresos: {formatCurrency(data.report.data.mes_actual.egresos)}</p> : null}</MetricCard> : null}
       {canViewActivities ? <MetricCard detail="Actividades registradas en el mes actual" icon={ClipboardList} label="Actividades" onRetry={retryLoad} state={data.activities} tag="Este mes" to="/actividades" tone="violet" value={data.activities.kind === 'ready' ? String(data.activities.data.length) : ''}/> : null}
     </div>
 

@@ -21,6 +21,9 @@ export function LoginPage() {
       if (isAxiosError(error) && error.response?.status === 422) {
         const message = (error.response.data as { message?: unknown } | undefined)?.message
         setLoginError(typeof message === 'string' && message.trim() ? message : 'No fue posible iniciar sesión. Revisa tus credenciales.')
+      } else if (isAxiosError(error) && error.response?.status === 429) {
+        const message = (error.response.data as { message?: unknown } | undefined)?.message
+        setLoginError(typeof message === 'string' && message.trim() ? message : 'Demasiados intentos. Espera un momento antes de volver a iniciar sesión.')
       } else if (isAxiosError(error) && !error.response) {
         setLoginError('No fue posible comunicarse con el servidor. Inténtalo de nuevo.')
       } else {

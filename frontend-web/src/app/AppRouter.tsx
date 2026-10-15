@@ -6,7 +6,6 @@ import { useAuth } from '../features/auth/authContext'
 import { canAccessArea, isStaffRole, type RestrictedArea } from '../features/auth/roleAccess'
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage'
 import { LoginPage } from '../features/auth/LoginPage'
-import { ModulePage } from '../features/modules/ModulePage'
 import { LoadingState } from '../components/states/LoadingState'
 import { AppLayout } from '../layouts/AppLayout'
 import { PublicLayout } from '../layouts/PublicLayout'
@@ -23,6 +22,8 @@ const ClinicalHistorySection = lazy(() => import('../features/clinical-history/C
 const PatientEvidenceSection = lazy(() => import('../features/evidence/PatientEvidenceSection').then((module) => ({ default: module.PatientEvidenceSection })))
 const UsersPage = lazy(() => import('../features/assistant/UsersPage').then((module) => ({ default: module.UsersPage })))
 const SystemActivityPage = lazy(() => import('../features/audit/SystemActivityPage').then((module) => ({ default: module.SystemActivityPage })))
+const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
+const CatalogPage = lazy(() => import('../features/catalog/CatalogPage').then((module) => ({ default: module.CatalogPage })))
 
 function ProtectedRouteContent() {
   return <Suspense fallback={<LoadingState/>}><Outlet/></Suspense>
@@ -111,13 +112,14 @@ export function AppRouter() {
           </Route>
         </Route>
         <Route element={<RestrictedRoute area="reportes"/>}>
-          <Route element={<ModulePage module="reportes"/>} path="reportes"/>
+          <Route element={<ReportsPage/>} path="reportes"/>
         </Route>
         <Route element={<RestrictedRoute area="usuarios"/>}>
           <Route element={<UsersPage/>} path="usuarios"/>
         </Route>
         <Route element={<RestrictedRoute area="configuracion"/>}>
           <Route element={<SystemActivityPage/>} path="configuracion"/>
+          <Route element={<CatalogPage/>} path="servicios"/>
         </Route>
         </Route>
       </Route>

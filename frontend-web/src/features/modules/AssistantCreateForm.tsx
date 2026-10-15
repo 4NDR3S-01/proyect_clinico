@@ -24,7 +24,7 @@ export function AssistantCreateForm({ onCreate, onCancel, error }: { onCreate: (
 
   return (
     <div>
-      <p className="admin-muted text-sm leading-6">Completa los datos de la única cuenta de asistente de la clínica.</p>
+      <p className="admin-muted text-sm leading-6">Completa los datos de la nueva cuenta de asistente.</p>
       <form aria-label="Datos para crear cuenta de asistente" className="mt-7" noValidate onSubmit={handleSubmit(submit)}>
         <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2">
           <div>

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '../../services/apiClient'
-import { getCurrentUser, login, logout } from './authService'
+import { getCurrentUser, login, logout, requestPasswordReset, resetPassword } from './authService'
 
 const originalBaseURL = apiClient.defaults.baseURL
 
@@ -54,6 +54,16 @@ describe('authService', () => {
 
     await expect(login({ username: '1234567890', password: 'valid-password-123' })).rejects.toThrow('VITE_API_BASE_URL')
     expect(post).not.toHaveBeenCalled()
+  })
+
+  it('uses the confirmed recovery endpoints and preserves the generic backend message', async () => {
+    apiClient.defaults.baseURL = 'https://api.clinica.test/api'
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: { message: 'Si existe una cuenta activa con ese correo, recibirás un código de recuperación.' } }).mockResolvedValueOnce({ data: { message: 'Contraseña actualizada.' } })
+    const values = { email: 'persona@backend.test', code: '123456', password: 'clave-confirmada', password_confirmation: 'clave-confirmada' }
+    expect(await requestPasswordReset(values.email)).toBe('Si existe una cuenta activa con ese correo, recibirás un código de recuperación.')
+    expect(await resetPassword(values)).toBe('Contraseña actualizada.')
+    expect(post).toHaveBeenNthCalledWith(1, '/auth/forgot-password', { email: values.email })
+    expect(post).toHaveBeenNthCalledWith(2, '/auth/reset-password', values)
   })
 
 })

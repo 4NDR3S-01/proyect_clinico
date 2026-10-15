@@ -10,6 +10,7 @@ import type { UserRole } from '../auth/authService'
 vi.mock('./patientService', () => ({ getPatients: vi.fn(), getPatient: vi.fn(), createPatient: vi.fn(), updatePatient: vi.fn() }))
 
 const patient = { id: 'patient-id', codigo_paciente: '001', nombres: 'Nombre recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: '1990-01-01' }
+const pageOf = (data: typeof patient[], current_page = 1, last_page = 1) => ({ data, current_page, last_page, per_page: 20, total: data.length, next_page_url: current_page < last_page ? '/pacientes?page=2' : null, prev_page_url: current_page > 1 ? '/pacientes?page=1' : null })
 const httpError = (status: number, message: string) => ({ isAxiosError: true, response: { status, data: { message } } })
 
 beforeEach(() => vi.resetAllMocks())
@@ -20,19 +21,19 @@ function renderDetail(path = '/pacientes/patient-id/resumen', role: UserRole = '
 
 describe('patient views', () => {
   it('shows loading and then only records received by GET /pacientes', async () => {
-    let resolve!: (value: typeof patient[]) => void
+    let resolve!: (value: ReturnType<typeof pageOf>) => void
     vi.mocked(getPatients).mockReturnValue(new Promise((done) => { resolve = done }))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     expect(screen.getByRole('status')).toHaveTextContent('Cargando información')
-    expect(screen.queryByRole('searchbox', { name: 'Buscar pacientes' })).not.toBeInTheDocument()
-    resolve([patient])
+    expect(screen.getByRole('searchbox', { name: 'Buscar pacientes' })).toBeInTheDocument()
+    resolve(pageOf([patient]))
     expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toHaveAttribute('href', '/pacientes/patient-id/resumen')
     expect(screen.getByText('Cédula: 0912345678')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Registrar paciente' })).toBeEnabled()
   })
 
   it('opens an empty accessible creation form and validates required fields and future dates', async () => {
-    vi.mocked(getPatients).mockResolvedValue([])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     const trigger = screen.getByRole('button', { name: 'Registrar paciente' })
     fireEvent.click(trigger)
@@ -57,7 +58,7 @@ describe('patient views', () => {
   })
 
   it('closes the patient dialog with Escape and restores focus to its trigger', async () => {
-    vi.mocked(getPatients).mockResolvedValue([])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     const trigger = screen.getByRole('button', { name: 'Registrar paciente' })
     fireEvent.click(trigger)
@@ -68,23 +69,24 @@ describe('patient views', () => {
   })
 
   it('sends exact fields with empty optionals as null, then refreshes GET after 201', async () => {
-    vi.mocked(getPatients).mockResolvedValueOnce([]).mockResolvedValueOnce([patient])
+    vi.mocked(getPatients).mockResolvedValueOnce(pageOf([])).mockResolvedValueOnce(pageOf([patient]))
     vi.mocked(createPatient).mockResolvedValue({ message: 'Paciente registrado correctamente.', patient })
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    await screen.findByText('No hay pacientes registrados.')
     fireEvent.click(screen.getByRole('button', { name: 'Registrar paciente' }))
     const form = screen.getByRole('form', { name: 'Datos del nuevo paciente' })
     fireEvent.change(within(form).getByLabelText(/Nombres/), { target: { value: 'Nombre recibido' } })
     fireEvent.change(within(form).getByLabelText(/Cédula/), { target: { value: '0912345678' } })
     fireEvent.click(within(form).getByRole('button', { name: 'Guardar paciente' }))
     await waitFor(() => expect(createPatient).toHaveBeenCalledWith({ nombres: 'Nombre recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: null }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Paciente registrado correctamente.')
+    expect(await screen.findByText('Paciente registrado correctamente.')).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toBeInTheDocument()
     expect(getPatients).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('form', { name: 'Datos del nuevo paciente' })).not.toBeInTheDocument()
   })
 
   it('preserves supplied optional values in the exact POST payload', async () => {
-    vi.mocked(getPatients).mockResolvedValue([])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     vi.mocked(createPatient).mockResolvedValue({ message: 'Paciente registrado correctamente.', patient })
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     fireEvent.click(screen.getByRole('button', { name: 'Registrar paciente' }))
@@ -103,9 +105,10 @@ describe('patient views', () => {
     ['network', { isAxiosError: true }, 'No fue posible comunicarse con el servidor.'],
     ['500', httpError(500, 'Server Error'), 'El servidor respondió con HTTP 500.'],
   ])('shows the %s POST failure without creating a fake record', async (_kind, failure, message) => {
-    vi.mocked(getPatients).mockResolvedValue([])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     vi.mocked(createPatient).mockRejectedValue(failure)
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    await screen.findByText('No hay pacientes registrados.')
     fireEvent.click(screen.getByRole('button', { name: 'Registrar paciente' }))
     const form = screen.getByRole('form', { name: 'Datos del nuevo paciente' })
     fireEvent.change(within(form).getByLabelText(/Nombres/), { target: { value: 'Nombre recibido' } })
@@ -117,10 +120,11 @@ describe('patient views', () => {
   })
 
   it('disables submit while pending and sends only one POST on repeated submit', async () => {
-    vi.mocked(getPatients).mockResolvedValue([])
+    vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     let resolve!: (value: { message: string; patient: typeof patient }) => void
     vi.mocked(createPatient).mockReturnValue(new Promise((done) => { resolve = done }))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    await screen.findByText('No hay pacientes registrados.')
     fireEvent.click(screen.getByRole('button', { name: 'Registrar paciente' }))
     const form = screen.getByRole('form', { name: 'Datos del nuevo paciente' })
     fireEvent.change(within(form).getByLabelText(/Nombres/), { target: { value: 'Nombre recibido' } })
@@ -130,43 +134,53 @@ describe('patient views', () => {
     fireEvent.submit(form)
     expect(createPatient).toHaveBeenCalledTimes(1)
     resolve({ message: 'Paciente registrado correctamente.', patient })
-    expect(await screen.findByRole('status')).toHaveTextContent('Paciente registrado correctamente.')
+    expect(await screen.findByText('Paciente registrado correctamente.')).toBeInTheDocument()
   })
 
   it('shows a genuine empty list and a retryable list error', async () => {
-    vi.mocked(getPatients).mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce([])
+    vi.mocked(getPatients).mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce(pageOf([]))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     expect(await screen.findByRole('alert')).toHaveTextContent('No pudimos cargar la información.')
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(await screen.findByText('No hay pacientes registrados.')).toBeInTheDocument()
-    expect(screen.queryByRole('searchbox', { name: 'Buscar pacientes' })).not.toBeInTheDocument()
+    expect(screen.getByRole('searchbox', { name: 'Buscar pacientes' })).toBeInTheDocument()
   })
 
   it.each([
     ['nombre sin distinguir mayúsculas', 'mArÍa', 'patient-name'],
     ['cédula', '0912345678', 'patient-name'],
     ['código', 'COD-002', 'patient-code'],
-  ])('filters the received patients by %s without requesting again', async (_kind, query, expectedId) => {
-    vi.mocked(getPatients).mockResolvedValue([
-      { ...patient, id: 'patient-name', codigo_paciente: 'COD-001', nombres: 'María López' },
-      { ...patient, id: 'patient-code', codigo_paciente: 'COD-002', nombres: 'Ana Ruiz', cedula: '0987654321' },
-    ])
+  ])('searches the backend by %s and renders its page', async (_kind, query, expectedId) => {
+    const first = { ...patient, id: 'patient-name', codigo_paciente: 'COD-001', nombres: 'María López' }
+    const second = { ...patient, id: 'patient-code', codigo_paciente: 'COD-002', nombres: 'Ana Ruiz', cedula: '0987654321' }
+    vi.mocked(getPatients).mockResolvedValueOnce(pageOf([first, second])).mockResolvedValueOnce(pageOf([expectedId === 'patient-name' ? first : second]))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     expect(await screen.findByRole('link', { name: /María López/ })).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: query } })
-    expect(screen.getAllByRole('link', { name: /Cédula:/ })).toHaveLength(1)
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: query, page: 1 }))
+    expect(await screen.findByRole('link', { name: /Cédula:/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Cédula:/ })).toHaveAttribute('href', `/pacientes/${expectedId}/resumen`)
-    expect(getPatients).toHaveBeenCalledTimes(1)
+    expect(getPatients).toHaveBeenCalledTimes(2)
   })
 
   it('distinguishes a search with no matches from a genuinely empty GET response', async () => {
-    vi.mocked(getPatients).mockResolvedValue([patient])
+    vi.mocked(getPatients).mockResolvedValueOnce(pageOf([patient])).mockResolvedValueOnce(pageOf([]))
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: 'sin coincidencia' } })
-    expect(screen.getByText('Ningún paciente coincide con la búsqueda.')).toBeInTheDocument()
+    expect(await screen.findByText('Ningún paciente coincide con la búsqueda.')).toBeInTheDocument()
     expect(screen.queryByText('No hay pacientes registrados.')).not.toBeInTheDocument()
-    expect(getPatients).toHaveBeenCalledTimes(1)
+    expect(getPatients).toHaveBeenCalledTimes(2)
+  })
+
+  it('navigates only through pages returned by Laravel', async () => {
+    vi.mocked(getPatients).mockResolvedValueOnce(pageOf([patient], 1, 2)).mockResolvedValueOnce(pageOf([{ ...patient, id: 'second-id' }], 2, 2))
+    render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    expect(await screen.findByText('Página 1 de 2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
+    expect(getPatients).toHaveBeenLastCalledWith({ page: 2 })
+    expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled()
   })
 
   it('loads a real patient detail and leaves clinical tabs pending', async () => {

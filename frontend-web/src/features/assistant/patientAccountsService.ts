@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiClient } from '../../services/apiClient'
+import { paginatedSchema } from '../../services/pagination'
 
 const accountSchema = z.object({
   id: z.string(), name: z.string(), email: z.string().nullable(), username: z.string(),
@@ -12,10 +13,18 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getPatientAccounts(): Promise<Account[]> {
+export async function getPatientAccounts(buscar = ''): Promise<Account[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/usuarios')
-  return z.object({ data: z.array(accountSchema) }).parse(data).data.filter((account) => account.role === 'paciente')
+  const accounts: Account[] = []
+  let pageNumber = 1
+  while (true) {
+    const { data } = await apiClient.get<unknown>('/usuarios', { params: { ...(buscar.trim() ? { buscar: buscar.trim() } : {}), page: pageNumber } })
+    const page = paginatedSchema(accountSchema).parse(data)
+    if (page.current_page !== pageNumber) throw new Error('La paginación de usuarios no coincide con la página solicitada.')
+    accounts.push(...page.data.filter((account) => account.role === 'paciente'))
+    if (pageNumber >= page.last_page) return accounts
+    pageNumber++
+  }
 }
 
 async function updateAccount(id: string, action: 'activar' | 'desactivar' | 'desvincular-paciente'): Promise<string> {

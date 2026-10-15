@@ -9,6 +9,7 @@ const authUserSchema = z.object({
   role: z.enum(['doctora', 'asistente', 'paciente']),
   paciente_id: z.string().nullable(),
   activo: z.boolean(),
+  foto_perfil_url: z.string().nullable().optional(),
 })
 
 export type UserRole = z.infer<typeof authUserSchema.shape.role>
@@ -47,4 +48,18 @@ export async function getCurrentUser(): Promise<AuthUser> {
 export async function logout(): Promise<void> {
   requireApiBaseUrl()
   await apiClient.post('/auth/logout')
+}
+
+const recoveryMessageSchema = z.object({ message: z.string() })
+
+export async function requestPasswordReset(email: string): Promise<string> {
+  requireApiBaseUrl()
+  const { data } = await apiClient.post<unknown>('/auth/forgot-password', { email })
+  return recoveryMessageSchema.parse(data).message
+}
+
+export async function resetPassword(values: { email: string; code: string; password: string; password_confirmation: string }): Promise<string> {
+  requireApiBaseUrl()
+  const { data } = await apiClient.post<unknown>('/auth/reset-password', values)
+  return recoveryMessageSchema.parse(data).message
 }

@@ -11,11 +11,11 @@ import { getClinicalHistoryByPatient } from '../features/clinical-history/clinic
 import { getPatientEvidence } from '../features/evidence/evidenceService'
 
 vi.mock('../features/assistant/assistantService', () => ({
-  getAssistant: vi.fn(() => new Promise(() => {})),
+  getAssistants: vi.fn(() => new Promise(() => {})),
 }))
 vi.mock('../features/assistant/patientAccountsService', () => ({ getPatientAccounts: vi.fn(() => Promise.resolve([])) }))
 vi.mock('../features/patients/patientService', () => ({
-  getPatients: vi.fn(() => Promise.resolve([])),
+  getPatients: vi.fn(() => Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 20, total: 0, next_page_url: null, prev_page_url: null })),
   getPatient: vi.fn(() => new Promise(() => {})),
 }))
 vi.mock('../features/agenda/agendaService', () => ({
@@ -92,14 +92,12 @@ describe('AppRouter', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument()
   })
 
-  it('explains pending password recovery without presenting a working form', () => {
+  it('offers the confirmed password recovery flow', () => {
     renderRouter('guest', '/recuperar-contrasena')
 
     expect(screen.getByRole('heading', { name: 'Recupera tu acceso' })).toBeInTheDocument()
-    expect(screen.getByText('La recuperación de contraseña todavía no está disponible.')).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Integración pendiente')
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Solicitar recuperación' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Correo electrónico' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Solicitar código' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('link', { name: 'Volver al inicio de sesión' }))
     expect(screen.getByRole('heading', { name: 'Bienvenido de nuevo' })).toBeInTheDocument()
   })
@@ -142,6 +140,15 @@ describe('AppRouter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No fue posible comunicarse con el servidor.')
+  })
+
+  it('shows the backend rate-limit message for login HTTP 429', async () => {
+    const login = vi.fn().mockRejectedValue({ isAxiosError: true, response: { status: 429, data: { message: 'Demasiados intentos.' } } })
+    renderRouter('guest', '/login', login)
+    fireEvent.change(screen.getByLabelText('Usuario o cédula'), { target: { value: 'doctora' } })
+    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'valid-password-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Demasiados intentos.')
   })
 
   it('shows the real dashboard sections without claiming there are no records before loading', async () => {
@@ -269,6 +276,8 @@ describe('AppRouter', () => {
     ['asistente', '/configuracion', false],
     ['doctora', '/reportes', true],
     ['asistente', '/reportes', false],
+    ['doctora', '/servicios', true],
+    ['asistente', '/servicios', false],
     ['asistente', '/usuarios', false],
     ['asistente', '/pacientes', true],
     ['doctora', '/pacientes/patient-id/resumen', true],
@@ -278,7 +287,7 @@ describe('AppRouter', () => {
 
     if (permitted) {
       if (route.startsWith('/pacientes/')) expect(screen.getByRole('status')).toHaveTextContent('Cargando')
-      else expect(await screen.findByRole('heading', { name: route === '/usuarios' ? 'Usuarios' : route === '/agenda' ? 'Agenda' : route === '/citas-medicas' ? 'Citas médicas' : route === '/actividades' ? 'Actividades' : route === '/caja' ? 'Caja' : route === '/configuracion' ? 'Actividad del sistema' : route === '/reportes' ? 'Reportes' : 'Pacientes' })).toBeInTheDocument()
+      else expect(await screen.findByRole('heading', { name: route === '/usuarios' ? 'Usuarios' : route === '/agenda' ? 'Agenda' : route === '/citas-medicas' ? 'Citas médicas' : route === '/actividades' ? 'Actividades' : route === '/caja' ? 'Caja' : route === '/configuracion' ? 'Actividad del sistema' : route === '/reportes' ? 'Reportes' : route === '/servicios' ? 'Servicios del consultorio' : 'Pacientes' })).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'Acceso no autorizado' })).not.toBeInTheDocument()
     } else {
       expect(screen.getByRole('heading', { name: 'Acceso no autorizado' })).toBeInTheDocument()

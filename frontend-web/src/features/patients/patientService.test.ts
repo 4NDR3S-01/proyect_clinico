@@ -4,6 +4,7 @@ import { createPatient, getPatient, getPatients, updatePatient } from './patient
 
 const originalBaseURL = apiClient.defaults.baseURL
 const patient = { id: 'patient-id', codigo_paciente: '001', nombres: 'Nombre recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: '1990-01-01T00:00:00.000000Z' }
+const pageOf = (data: unknown[]) => ({ data, current_page: 1, last_page: 1, per_page: 20, total: data.length, next_page_url: null, prev_page_url: null })
 
 afterEach(() => {
   apiClient.defaults.baseURL = originalBaseURL
@@ -13,18 +14,26 @@ afterEach(() => {
 describe('patientService', () => {
   it('loads the real patient list and detail using confirmed paths', async () => {
     apiClient.defaults.baseURL = 'https://api.clinica.test/api'
-    const get = vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { data: [{ ...patient, created_at: 'ignored' }] } }).mockResolvedValueOnce({ data: { data: patient } })
-    expect(await getPatients()).toEqual([patient])
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: pageOf([{ ...patient, created_at: 'ignored' }]) }).mockResolvedValueOnce({ data: { data: patient } })
+    expect(await getPatients()).toEqual(pageOf([patient]))
     expect(await getPatient('patient-id')).toEqual(patient)
-    expect(get).toHaveBeenNthCalledWith(1, '/pacientes')
+    expect(get).toHaveBeenNthCalledWith(1, '/pacientes', { params: {} })
     expect(get).toHaveBeenNthCalledWith(2, '/pacientes/patient-id')
   })
 
   it('accepts an empty list and rejects malformed patient records', async () => {
     apiClient.defaults.baseURL = 'https://api.clinica.test/api'
-    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { data: [] } }).mockResolvedValueOnce({ data: { data: [{ ...patient, nombres: undefined }] } })
-    expect(await getPatients()).toEqual([])
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: pageOf([]) }).mockResolvedValueOnce({ data: pageOf([{ ...patient, nombres: undefined }]) })
+    expect(await getPatients()).toEqual(pageOf([]))
     await expect(getPatients()).rejects.toThrow()
+  })
+
+  it('passes backend search and page parameters without filtering a partial page locally', async () => {
+    apiClient.defaults.baseURL = 'https://api.clinica.test/api'
+    const response = { ...pageOf([patient]), current_page: 2, last_page: 3, total: 42, prev_page_url: '/pacientes?page=1', next_page_url: '/pacientes?page=3' }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: response })
+    expect(await getPatients({ buscar: 'Nombre', page: 2 })).toEqual(response)
+    expect(get).toHaveBeenCalledExactlyOnceWith('/pacientes', { params: { buscar: 'Nombre', page: 2 } })
   })
 
   it('rejects an invalid patient and does not request without an API base', async () => {

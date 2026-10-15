@@ -4,7 +4,7 @@ import { EmptyState } from '../../components/states/EmptyState'
 import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
 import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
-import { UsersRound } from 'lucide-react'
+import { Search, UsersRound } from 'lucide-react'
 import { activatePatientAccount, deactivatePatientAccount, getPatientAccounts, unlinkPatientAccount, type Account } from './patientAccountsService'
 
 type State = { kind: 'loading' } | { kind: 'ready'; accounts: Account[] } | { kind: 'error'; message: string }
@@ -23,6 +23,7 @@ export function PatientAccountsSection() {
   const [success, setSuccess] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<{ account: Account; action: 'desactivar' | 'desvincular' } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [search, setSearch] = useState('')
   const pending = useRef(false)
   const trigger = useRef<HTMLButtonElement | null>(null)
   const sectionHeading = useRef<HTMLHeadingElement | null>(null)
@@ -30,10 +31,10 @@ export function PatientAccountsSection() {
   const load = useCallback(async (): Promise<boolean> => {
     const id = ++requestId.current
     setState({ kind: 'loading' })
-    try { const accounts = await getPatientAccounts(); if (id === requestId.current) setState({ kind: 'ready', accounts }); return true }
+    try { const accounts = await getPatientAccounts(search); if (id === requestId.current) setState({ kind: 'ready', accounts }); return true }
     catch (cause) { if (id === requestId.current) setState({ kind: 'error', message: errorMessage(cause) }); return false }
-  }, [])
-  useEffect(() => { const request = requestId; void Promise.resolve().then(load); return () => { request.current++ } }, [load])
+  }, [search])
+  useEffect(() => { const request = requestId; const timer = window.setTimeout(() => { void load() }, 250); return () => { window.clearTimeout(timer); request.current++ } }, [load])
   const mutate = async (account: Account, action: 'activar' | 'desactivar' | 'desvincular') => {
     if (pending.current) return
     pending.current = true; setBusy(true); setError(null); setSuccess(null)
@@ -48,7 +49,8 @@ export function PatientAccountsSection() {
     <p className="admin-kicker">Acceso de pacientes</p><h2 className="mt-2 text-xl font-semibold text-ink-950" id="patient-accounts-title" ref={sectionHeading} tabIndex={-1}>Cuentas de pacientes</h2>
     {success ? <p className="admin-success mt-4 rounded-lg p-3 text-sm" role="status">{success}</p> : null}
     {error ? <p className="mt-4 text-sm text-red-700" role="alert">{error}</p> : null}
-    {state.kind === 'loading' ? <LoadingState/> : state.kind === 'error' ? <ErrorState description={state.message} onRetry={() => { void load() }}/> : state.accounts.length === 0 ? <div className="mt-5"><EmptyState description="El servidor no devolvió cuentas con rol paciente." icon={UsersRound} title="Sin cuentas de pacientes"/></div> : (
+    <div className="mt-5 w-full sm:max-w-[360px]"><label className="admin-meta text-xs font-semibold" htmlFor="account-search">Buscar cuentas</label><div className="relative mt-1"><Search aria-hidden="true" className="admin-meta pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={17}/><input className="admin-input admin-search-input w-full text-sm" id="account-search" maxLength={255} onChange={(event) => { setState({ kind: 'loading' }); setSearch(event.target.value) }} placeholder="Nombre, usuario o correo" type="search" value={search}/></div></div>
+    {state.kind === 'loading' ? <LoadingState/> : state.kind === 'error' ? <ErrorState description={state.message} onRetry={() => { void load() }}/> : state.accounts.length === 0 ? <div className="mt-5"><EmptyState description={search.trim() ? 'No se encontraron cuentas de pacientes en los resultados del servidor.' : 'El servidor no devolvió cuentas con rol paciente.'} icon={UsersRound} title={search.trim() ? 'Sin coincidencias' : 'Sin cuentas de pacientes'}/></div> : (
       <ul className="mt-5 grid gap-3">{state.accounts.map((account) => (
         <li className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#dbe6f2] p-4" key={account.id}>
           <div className="min-w-0"><p className="font-semibold text-ink-950">{account.name}</p><p className="admin-muted break-all text-sm">{account.username}{account.email ? ` · ${account.email}` : ''}</p><div className="mt-2 flex flex-wrap gap-2"><span className={`admin-pill ${account.activo ? 'admin-pill-ready' : 'admin-pill-pending'}`}>{account.activo ? 'Activa' : 'Inactiva'}</span><span className={`admin-pill ${account.paciente_id ? 'admin-pill-ready' : 'admin-pill-pending'}`}>{account.paciente_id ? 'Vinculada a expediente' : 'Desvinculada'}</span></div></div>

@@ -4,6 +4,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/authContext'
 import type { UserRole } from '../features/auth/authService'
 import { canAccessArea, type RestrictedArea } from '../features/auth/roleAccess'
+import { ProfilePhotoControl } from '../features/auth/ProfilePhotoControl'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; access?: RestrictedArea }
 
@@ -74,7 +75,7 @@ export function AppLayout() {
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
-  const title = navItems.find((item) => item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))?.label ?? 'Expediente clínico'
+  const title = location.pathname === '/servicios' ? 'Servicios del consultorio' : navItems.find((item) => item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to))?.label ?? 'Expediente clínico'
 
   const closeMenu = () => {
     setOpen(false)
@@ -128,7 +129,7 @@ export function AppLayout() {
             <span aria-hidden="true" className="h-7 w-px bg-[#d5e3f0]"/>
             {user ? (
               <div className="flex min-w-0 items-center gap-2 text-slate-600">
-                <span aria-hidden="true" className="admin-avatar grid size-9 shrink-0 place-items-center rounded-full"><UserRound size={17}/></span>
+                <ProfilePhotoControl key={user.id}/>
                 <span className="flex min-w-0 flex-col text-sm leading-tight">
                   <span className="max-w-[7rem] truncate font-medium text-ink-950 sm:max-w-[12rem]" title={user.name}>{user.name}</span>
                   <span className="text-xs text-slate-500">{roleLabels[user.role]}</span>
