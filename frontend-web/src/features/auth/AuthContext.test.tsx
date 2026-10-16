@@ -125,7 +125,7 @@ describe('AuthProvider', () => {
 
     expect(await screen.findByRole('heading', { name: 'Resumen de gestión' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Abrir menú de perfil' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
 
     expect(await screen.findByRole('heading', { name: 'Bienvenido de nuevo' })).toBeInTheDocument()
     expect(getAccessToken()).toBeNull()

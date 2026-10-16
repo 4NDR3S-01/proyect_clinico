@@ -108,10 +108,10 @@ export function AgendaPage() {
     {appointmentSuccess ? <p className="admin-success rounded-xl p-4 text-sm" role="status">{appointmentSuccess}</p> : null}
     {appointmentOpen ? <AccessibleDialog busy={appointmentBusy} onClose={closeAppointment} title="Agendar cita médica" titleId="agenda-appointment-title"><AppointmentForm busy={appointmentBusy} date={selectedDate} error={appointmentError} onCancel={closeAppointment} onSave={(values) => { void saveAppointment(values) }}/></AccessibleDialog> : null}
     <div className="flex justify-end"><div className="flex items-center gap-2"><button aria-label="Mes anterior" className="admin-secondary grid size-11 place-items-center rounded-lg" onClick={() => shiftMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={18}/></button><label className="text-xs font-semibold text-ink-950">Mes<input aria-label="Mes" className="admin-input ml-2 text-sm" onChange={(event) => { if (!event.target.value) return; const [year, value] = event.target.value.split('-').map(Number); selectMonth(year, value) }} type="month" value={`${month.year}-${two(month.value)}`}/></label><button aria-label="Mes siguiente" className="admin-secondary grid size-11 place-items-center rounded-lg" onClick={() => shiftMonth(1)} type="button"><ChevronRight aria-hidden="true" size={18}/></button></div></div>
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(290px,.85fr)]">
-      <section aria-label={`Calendario de ${monthLabel}`} className="admin-surface min-w-0 rounded-[20px] p-4 sm:p-5">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-bold capitalize text-ink-950"><CalendarDays aria-hidden="true" size={20}/>{monthLabel}</h2>
-        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-[#526a87] sm:gap-2">
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+      <section aria-label={`Calendario de ${monthLabel}`} className="admin-surface w-full max-w-[420px] min-w-0 rounded-[20px] p-3 sm:p-4 xl:max-w-none">
+        <h2 className="mb-3 flex items-center gap-2 text-base font-bold capitalize text-ink-950"><CalendarDays aria-hidden="true" size={18}/>{monthLabel}</h2>
+        <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-[#526a87]">
           {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((label, index) => <span key={index}>{label}</span>)}
           {Array.from({ length: offset }, (_, index) => <span aria-hidden="true" key={`empty-${index}`}/>)}
           {days.map((day) => {
@@ -119,7 +119,7 @@ export function AgendaPage() {
             const records = state.kind === 'ready' ? state.entries.filter((entry) => entry.fecha?.slice(0, 10) === key) : []
             const active = daySelected && selectedDate === key
             const today = key === dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate())
-            return <button aria-label={`Seleccionar ${day} de ${monthLabel}`} aria-current={today ? 'date' : undefined} aria-pressed={active} className={`min-h-12 rounded-lg border p-1 text-left align-top transition-colors sm:min-h-[62px] sm:p-2 ${active ? 'border-clinic-600 bg-clinic-50 ring-1 ring-clinic-600' : today ? 'border-sky-400 bg-sky-50/70 hover:bg-sky-100' : 'border-[#dbe6f2] hover:bg-[#f3f8fe]'}`} key={key} onClick={() => { setSelectedDate(key); setDaySelected(true); setAppointmentSuccess(null) }} type="button"><span className="block text-sm font-bold text-ink-950">{day}</span>{records.length ? <span className="mt-1 block truncate text-[10px] font-medium text-clinic-700">{records.length} {records.length === 1 ? 'registro' : 'registros'}</span> : null}</button>
+            return <button aria-label={`Seleccionar ${day} de ${monthLabel}${records.length ? `, ${records.length} ${records.length === 1 ? 'registro' : 'registros'}` : ''}`} aria-current={today ? 'date' : undefined} aria-pressed={active} className={`relative min-h-11 rounded-lg border p-1 text-center transition-colors sm:min-h-12 ${active ? 'border-clinic-600 bg-clinic-50 ring-1 ring-clinic-600' : today ? 'border-sky-400 bg-sky-50/70 hover:bg-sky-100' : 'border-[#dbe6f2] hover:bg-[#f3f8fe]'}`} key={key} onClick={() => { setSelectedDate(key); setDaySelected(true); setAppointmentSuccess(null) }} type="button"><span className="block text-sm font-bold text-ink-950">{day}</span>{records.length ? <span aria-hidden="true" className="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-clinic-600"/> : null}</button>
           })}
         </div>
       </section>

@@ -24,7 +24,6 @@ const UsersPage = lazy(() => import('../features/assistant/UsersPage').then((mod
 const SystemActivityPage = lazy(() => import('../features/audit/SystemActivityPage').then((module) => ({ default: module.SystemActivityPage })))
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const CatalogPage = lazy(() => import('../features/catalog/CatalogPage').then((module) => ({ default: module.CatalogPage })))
-const ProfilePage = lazy(() => import('../features/auth/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 
 function ProtectedRouteContent() {
   return <Suspense fallback={<LoadingState/>}><Outlet/></Suspense>
@@ -88,7 +87,6 @@ export function AppRouter() {
       <Route element={<ProtectedArea/>}>
         <Route element={<ProtectedRouteContent/>}>
         <Route element={<DashboardPage/>} index/>
-        <Route element={<ProfilePage/>} path="mi-perfil"/>
         <Route element={<RestrictedRoute area="agenda"/>}>
           <Route element={<AgendaPage/>} path="agenda"/>
           <Route element={<MedicalAppointmentsPage/>} path="citas-medicas"/>

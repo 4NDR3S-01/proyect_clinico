@@ -4,8 +4,8 @@ import { useAuth } from '../auth/authContext'
 
 const topics = [
   { id: 'diagnostico', label: 'Diagnóstico', detail: 'Los datos clínicos se registran en cada cita médica. Esta vista del expediente espera un contrato para consultar el historial completo del paciente.' },
-  { id: 'tratamientos', label: 'Tratamientos', detail: 'Los tratamientos están asociados a citas médicas. Su consulta longitudinal desde el expediente está en preparación.' },
   { id: 'odontograma', label: 'Odontograma', detail: 'La estructura clínica de los datos del odontograma todavía no está definida para esta vista.' },
+  { id: 'tratamientos', label: 'Tratamientos', detail: 'Los tratamientos están asociados a citas médicas. Su consulta longitudinal desde el expediente está en preparación.' },
 ] as const
 
 export function PatientDiagnosisSection() {

@@ -205,6 +205,7 @@ describe('patient views', () => {
     renderDetail('/pacientes/patient-id/tratamientos')
     expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tratamientos' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Diagnóstico', 'Odontograma', 'Tratamientos'])
     fireEvent.click(screen.getByRole('button', { name: 'Odontograma' }))
     expect(screen.getByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('status')).toHaveTextContent('estructura clínica')
