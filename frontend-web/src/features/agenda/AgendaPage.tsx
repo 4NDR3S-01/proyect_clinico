@@ -6,7 +6,6 @@ import { LoadingState } from '../../components/states/LoadingState'
 import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
 import { formatDate } from '../../utils/displayFormat'
 import { useAuth } from '../auth/authContext'
-import { getPatients } from '../patients/patientService'
 import { createMedicalAppointment, getAgendaMonth, type AgendaEntry } from './agendaService'
 
 type AgendaState = { kind: 'loading' } | { kind: 'ready'; entries: AgendaEntry[] } | { kind: 'error'; message: string }
@@ -14,7 +13,7 @@ const two = (value: number) => String(value).padStart(2, '0')
 const dateKey = (year: number, month: number, day: number) => `${year}-${two(month)}-${two(day)}`
 
 function errorMessage(error: unknown): string {
-  if (isAxiosError(error) && !error.response) return 'No fue posible comunicarse con el servidor.'
+  if (isAxiosError(error) && !error.response) return 'No fue posible confirmar si la cita se registró. Consulta la agenda antes de intentar crearla de nuevo.'
   if (isAxiosError(error) && [409, 422].includes(error.response?.status ?? 0)) {
     const message = (error.response?.data as { message?: unknown } | undefined)?.message
     if (typeof message === 'string' && message.trim()) return message
@@ -91,8 +90,6 @@ export function AgendaPage() {
     if (appointmentPending.current) return
     appointmentPending.current = true; setAppointmentBusy(true); setAppointmentError(null)
     try {
-      const patients = await getPatients({ buscar: values.codigo_paciente })
-      if (!patients.data.some((patient) => patient.codigo_paciente === values.codigo_paciente)) { setAppointmentError('No se encontró un paciente con ese código. Compruébalo antes de agendar.'); return }
       await createMedicalAppointment(values)
       const refreshed = await load()
       setAppointmentOpen(false)

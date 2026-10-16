@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-export function AccessibleDialog({ title, titleId, onClose, children, busy = false }: { title: string; titleId: string; onClose: () => void; children: ReactNode; busy?: boolean }) {
+export function AccessibleDialog({ title, titleId, onClose, children, busy = false, compact = false, closeLabel = 'Cerrar diálogo' }: { title: string; titleId: string; onClose: () => void; children: ReactNode; busy?: boolean; compact?: boolean; closeLabel?: string }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
   const busyRef = useRef(busy)
@@ -29,10 +29,10 @@ export function AccessibleDialog({ title, titleId, onClose, children, busy = fal
   }, [])
 
   return createPortal(
-    <div className="admin-shell admin-dialog-layer fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-5">
+    <div className={`admin-shell admin-dialog-layer fixed inset-0 z-50 flex justify-center ${compact ? 'items-center p-4' : 'items-end p-0 sm:items-center sm:p-5'}`}>
       <button aria-label={`Cerrar ${title}`} className="admin-dialog-backdrop absolute inset-0" disabled={busy} onClick={onClose} tabIndex={-1} type="button"/>
-      <div aria-labelledby={titleId} aria-modal="true" className="admin-dialog-panel admin-surface-raised relative flex max-h-[100dvh] w-full max-w-[670px] flex-col overflow-hidden rounded-t-[22px] sm:max-h-[min(90dvh,850px)] sm:rounded-[22px]" ref={panelRef} role="dialog">
-        <div className="flex shrink-0 items-center justify-between border-b border-[#dbe6f2] bg-[#f6faff] px-6 py-5 sm:px-8"><h2 className="text-xl font-bold tracking-tight text-ink-950" id={titleId}>{title}</h2><button aria-label="Cerrar diálogo" className="grid size-10 place-items-center rounded-[10px] text-[#526a87] hover:bg-[#e3f1ff] focus-visible:outline-2 focus-visible:outline-offset-2" disabled={busy} onClick={onClose} type="button"><X aria-hidden="true" size={20}/></button></div>
+      <div aria-labelledby={titleId} aria-modal="true" className={`admin-dialog-panel admin-surface-raised relative flex w-full flex-col overflow-hidden ${compact ? 'max-h-[calc(100dvh-2rem)] max-w-[420px] rounded-[22px]' : 'max-h-[100dvh] max-w-[670px] rounded-t-[22px] sm:max-h-[min(90dvh,850px)] sm:rounded-[22px]'}`} ref={panelRef} role="dialog">
+        <div className="flex shrink-0 items-center justify-between border-b border-[#dbe6f2] bg-[#f6faff] px-6 py-5 sm:px-8"><h2 className="text-xl font-bold tracking-tight text-ink-950" id={titleId}>{title}</h2><button aria-label={closeLabel} className="grid size-10 place-items-center rounded-[10px] text-[#526a87] hover:bg-[#e3f1ff] focus-visible:outline-2 focus-visible:outline-offset-2" disabled={busy} onClick={onClose} type="button"><X aria-hidden="true" size={20}/></button></div>
         <div className="min-h-0 overflow-y-auto p-6 sm:p-8">{children}</div>
       </div>
     </div>,

@@ -6,6 +6,7 @@ import type { UserRole } from '../features/auth/authService'
 import { canAccessArea, type RestrictedArea } from '../features/auth/roleAccess'
 import { ProtectedPhoto } from '../features/auth/ProtectedPhoto'
 import { ProfilePhotoControl } from '../features/auth/ProfilePhotoControl'
+import { AccessibleDialog } from '../components/ui/AccessibleDialog'
 
 type NavItem = { to: string; label: string; icon: LucideIcon; access?: RestrictedArea }
 
@@ -52,6 +53,7 @@ function Sidebar({ close, compact = false, collapsed = false, toggleCollapse }: 
             end={to === '/'}
             key={to}
             onClick={close}
+            aria-label={compact ? label : undefined}
             title={compact ? label : undefined}
             to={to}
           >
@@ -78,7 +80,6 @@ export function AppLayout() {
   const [photoRevision, setPhotoRevision] = useState(0)
   const logoutPending = useRef(false)
   const profileTrigger = useRef<HTMLButtonElement>(null)
-  const profileMenu = useRef<HTMLDivElement>(null)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const drawerRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
@@ -92,19 +93,11 @@ export function AppLayout() {
     return () => window.removeEventListener('clinic:profile-photo-changed', onPhoto)
   }, [])
 
-  useEffect(() => {
-    if (!profileOpen) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !photoBusy) { setProfileOpen(false); profileTrigger.current?.focus() }
-    }
-    const onPointerDown = (event: PointerEvent) => {
-      if (photoBusy || !(event.target instanceof Node) || profileMenu.current?.contains(event.target) || profileTrigger.current?.contains(event.target)) return
-      setProfileOpen(false)
-    }
-    document.addEventListener('keydown', onKeyDown)
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('pointerdown', onPointerDown) }
-  }, [profileOpen, photoBusy])
+  const closeProfile = () => {
+    if (photoBusy || logoutBusy) return
+    setProfileOpen(false)
+    profileTrigger.current?.focus()
+  }
 
   const signOut = async () => {
     if (logoutPending.current) return
@@ -164,14 +157,14 @@ export function AppLayout() {
           <div className="ml-auto flex shrink-0 items-center gap-3 pl-3">
             <span aria-hidden="true" className="h-7 w-px bg-[#d5e3f0]"/>
             {user ? <div className="relative">
-              <button aria-controls="profile-menu" aria-expanded={profileOpen} aria-haspopup="dialog" aria-label="Abrir menú de perfil" className="admin-interactive flex min-h-11 items-center gap-2 rounded-lg px-1 text-slate-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600" onClick={() => { if (!photoBusy) setProfileOpen((value) => !value) }} ref={profileTrigger} type="button">
+              <button aria-expanded={profileOpen} aria-haspopup="dialog" aria-label="Abrir menú de perfil" className="admin-interactive flex min-h-11 items-center gap-2 rounded-lg px-1 text-slate-600 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600" onClick={() => { if (!photoBusy && !logoutBusy) setProfileOpen((value) => !value) }} ref={profileTrigger} type="button">
                 <ProtectedPhoto className="size-10 rounded-full text-sm font-semibold" key={`${user.id}-${photoRevision}`} name={user.name} photoUrl={photoUrl}/>
                 <span className="hidden min-w-0 flex-col text-left text-sm leading-tight sm:flex"><span className="max-w-[12rem] truncate font-medium text-ink-950" title={user.name}>{user.name}</span><span className="text-xs text-slate-500">{roleLabels[user.role]}</span></span><ChevronDown aria-hidden="true" size={16}/>
               </button>
-              {profileOpen ? <div aria-label="Fotografía y cuenta" className="admin-surface-raised absolute right-0 top-full z-30 mt-2 max-h-[calc(100dvh-6rem)] w-[min(21rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-[#dbe6f2] p-5 shadow-lg" id="profile-menu" ref={profileMenu} role="dialog">
+              {profileOpen ? <AccessibleDialog busy={photoBusy || logoutBusy} closeLabel="Cerrar" compact onClose={closeProfile} title="Fotografía de perfil" titleId="profile-photo-title">
                 <ProfilePhotoControl initialPhotoUrl={photoUrl} onBusyChange={setPhotoBusy}/>
-                <div className="mt-5 border-t border-[#e6edf6] pt-3"><button className="admin-interactive flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-ink-950 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600 disabled:opacity-60" disabled={logoutBusy || photoBusy} onClick={() => { void signOut() }} type="button"><LogOut aria-hidden="true" size={17}/>{logoutBusy ? 'Cerrando sesión…' : 'Cerrar sesión'}</button></div>
-              </div> : null}
+                <div className="mt-6 space-y-2 border-t border-[#e6edf6] pt-4"><button className="admin-interactive flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-medium text-ink-950 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600 disabled:opacity-60" disabled={logoutBusy || photoBusy} onClick={() => { void signOut() }} type="button"><LogOut aria-hidden="true" size={17}/>{logoutBusy ? 'Cerrando sesión…' : 'Cerrar sesión'}</button><button className="admin-secondary min-h-11 w-full rounded-lg text-sm font-semibold disabled:opacity-60" disabled={logoutBusy || photoBusy} onClick={closeProfile} type="button">Volver</button></div>
+              </AccessibleDialog> : null}
             </div> : null}
           </div>
         </header>

@@ -64,7 +64,7 @@ export function ProfilePhotoControl({ initialPhotoUrl, onBusyChange }: { initial
   }
 
   return <div className="text-center">
-    <ProtectedPhoto className="mx-auto size-30 rounded-full text-4xl font-semibold" fallbackText={initials} key={`${user.id}-${revision}`} name={user.name} onLoadError={handleLoadError} photoUrl={photoUrl}/>
+    <ProtectedPhoto className="mx-auto size-36 rounded-full text-4xl font-semibold sm:size-44" fallbackText={initials} key={`${user.id}-${revision}`} name={user.name} onLoadError={handleLoadError} photoUrl={photoUrl}/>
     <p className="mt-3 truncate text-base font-semibold text-ink-950" title={user.name}>{user.name}</p>
     <p className="mt-0.5 text-sm text-slate-500">{roleLabels[user.role]}</p>
     {loadError && photoUrl ? <p className="mt-3 text-sm text-amber-800" role="status">No fue posible mostrar la foto guardada. Puedes intentarlo de nuevo más tarde.</p> : null}

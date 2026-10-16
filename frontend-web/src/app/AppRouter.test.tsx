@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { AppRouter } from './AppRouter'
@@ -9,6 +9,7 @@ import type { AuthUser, UserRole } from '../features/auth/authService'
 import { getPatient } from '../features/patients/patientService'
 import { getClinicalHistoryByPatient } from '../features/clinical-history/clinicalHistoryService'
 import { getPatientEvidence } from '../features/evidence/evidenceService'
+import { deleteProfilePhoto, getProfilePhoto, uploadProfilePhoto } from '../features/auth/profilePhotoService'
 
 vi.mock('../features/assistant/assistantService', () => ({
   getAssistants: vi.fn(() => new Promise(() => {})),
@@ -34,6 +35,7 @@ vi.mock('../features/clinical-history/clinicalHistoryService', () => ({
 vi.mock('../features/evidence/evidenceService', () => ({ getPatientEvidence: vi.fn(() => Promise.resolve([])) }))
 vi.mock('../features/cash/cashService', () => ({ getCashSummary: vi.fn(() => Promise.resolve({ periodo: 'mes', ingresos: '0.00', egresos: '0.00', saldo: '0.00' })), getExpenses: vi.fn(() => Promise.resolve([])) }))
 vi.mock('../features/audit/auditService', () => ({ getRecordedActions: vi.fn(() => Promise.resolve([])), getRecordedSessions: vi.fn(() => Promise.resolve([])) }))
+vi.mock('../features/auth/profilePhotoService', () => ({ getProfilePhoto: vi.fn(), uploadProfilePhoto: vi.fn(), deleteProfilePhoto: vi.fn() }))
 
 function renderRouter(status: AuthStatus, path = '/', login: (values: LoginValues) => Promise<void> = async () => {}, user: AuthUser | null = authenticatedUser('doctora')) {
   render(
@@ -236,25 +238,76 @@ describe('AppRouter', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('opens the account photo panel and closes it with Escape or outside click', () => {
+  it('opens the centered photo dialog and restores focus with Escape, X and Volver', () => {
     renderRouter('authenticated')
     const trigger = screen.getByRole('button', { name: 'Abrir menú de perfil' })
     fireEvent.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
-    const panel = screen.getByRole('dialog', { name: 'Fotografía y cuenta' })
+    const panel = screen.getByRole('dialog', { name: 'Fotografía de perfil' })
+    expect(panel).toHaveAttribute('aria-modal', 'true')
+    expect(panel).toHaveClass('max-w-[420px]')
     expect(within(panel).getByText('Nombre de sesión')).toBeInTheDocument()
     expect(within(panel).getByText('Doctora')).toBeInTheDocument()
     expect(within(panel).getByLabelText('Seleccionar foto')).toBeInTheDocument()
     expect(within(panel).getByRole('button', { name: 'Cerrar sesión' })).toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Volver' })).toBeInTheDocument()
     expect(within(panel).queryByText('Mi perfil')).not.toBeInTheDocument()
-    within(panel).getByLabelText('Seleccionar foto').focus()
-    expect(within(panel).getByLabelText('Seleccionar foto')).toHaveFocus()
+    expect(within(panel).getByRole('button', { name: 'Cerrar' })).toHaveFocus()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(trigger).toHaveFocus()
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     fireEvent.click(trigger)
-    fireEvent.pointerDown(document.body)
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Fotografía de perfil' })).getByRole('button', { name: 'Volver' }))
+    expect(trigger).toHaveFocus()
+    fireEvent.click(trigger)
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Fotografía de perfil' })).getByRole('button', { name: 'Cerrar' }))
+    expect(trigger).toHaveFocus()
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('synchronizes the large photo and header avatar after upload and confirmed deletion', async () => {
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:profile-photo') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    vi.mocked(uploadProfilePhoto).mockResolvedValue('/api/usuarios/user-id/foto')
+    vi.mocked(getProfilePhoto).mockResolvedValue(new Blob(['photo'], { type: 'image/png' }))
+    vi.mocked(deleteProfilePhoto).mockResolvedValue(null)
+    renderRouter('authenticated')
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir menú de perfil' }))
+    const panel = screen.getByRole('dialog', { name: 'Fotografía de perfil' })
+    fireEvent.change(within(panel).getByLabelText('Seleccionar foto'), { target: { files: [new File(['photo'], 'perfil.png', { type: 'image/png' })] } })
+    await waitFor(() => expect(document.querySelectorAll('img[src="blob:profile-photo"]')).toHaveLength(2))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Eliminar foto' }))
+    fireEvent.click(within(panel).getByRole('button', { name: 'Confirmar eliminación' }))
+    await waitFor(() => expect(document.querySelectorAll('img[src="blob:profile-photo"]')).toHaveLength(0))
+    expect(within(panel).queryByRole('button', { name: 'Eliminar foto' })).not.toBeInTheDocument()
+    expect(URL.revokeObjectURL).toHaveBeenCalled()
+  })
+
+  it('traps keyboard focus and prevents closing the photo dialog during an upload', async () => {
+    let finishUpload!: (url: string) => void
+    vi.mocked(uploadProfilePhoto).mockImplementation(() => new Promise((resolve) => { finishUpload = resolve }))
+    vi.mocked(getProfilePhoto).mockResolvedValue(new Blob(['photo'], { type: 'image/png' }))
+    renderRouter('authenticated')
+    const trigger = screen.getByRole('button', { name: 'Abrir menú de perfil' })
+    fireEvent.click(trigger)
+    const panel = screen.getByRole('dialog', { name: 'Fotografía de perfil' })
+    const close = within(panel).getByRole('button', { name: 'Cerrar' })
+    const back = within(panel).getByRole('button', { name: 'Volver' })
+    vi.spyOn(close, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList)
+    vi.spyOn(back, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList)
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true })
+    expect(back).toHaveFocus()
+    fireEvent.keyDown(document, { key: 'Tab' })
+    expect(close).toHaveFocus()
+    fireEvent.change(within(panel).getByLabelText('Seleccionar foto'), { target: { files: [new File(['photo'], 'perfil.png', { type: 'image/png' })] } })
+    expect(close).toBeDisabled()
+    expect(back).toBeDisabled()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(panel).toBeInTheDocument()
+    await act(async () => { finishUpload('/api/usuarios/user-id/foto') })
+    expect(close).toBeEnabled()
+    fireEvent.click(back)
+    expect(trigger).toHaveFocus()
   })
 
   it('returns old profile links to the dashboard instead of mounting a separate page', async () => {
@@ -273,6 +326,8 @@ describe('AppRouter', () => {
     expect(aside).toHaveClass('w-[72px]')
     const patients = within(aside).getByRole('link', { name: 'Pacientes' })
     expect(patients).toHaveAttribute('title', 'Pacientes')
+    expect(patients).toHaveAttribute('aria-label', 'Pacientes')
+    expect(within(aside).getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
     fireEvent.mouseEnter(aside)
     fireEvent.mouseMove(aside)
     expect(aside).not.toHaveClass('w-[72px]')
