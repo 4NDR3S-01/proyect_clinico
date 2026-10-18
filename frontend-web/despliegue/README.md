@@ -35,3 +35,5 @@ Get-Content C:\nginx\logs\clinica_web_access.log -Wait
 ```
 
 En Linux está `instalar.sh`, que hace lo mismo.
+
+Publicar además una copia de la web en Vercel (opcional): [`../VERCEL.md`](../VERCEL.md).

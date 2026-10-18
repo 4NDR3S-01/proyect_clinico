@@ -24,6 +24,10 @@ El instalador hace lo siguiente:
 | `clinica.conf.template` | Upstreams, log con instancia y `req_id`, límite de intentos en `/api/auth/`, 503 JSON si caen las dos instancias |
 | `clinica-backend.conf.template` | Proxy hacia el backend: timeouts, reintento solo si no se pudo conectar, cabeceras `X-Forwarded-*` |
 
+## Acceso público para la web en Vercel (opcional)
+
+`sudo balanceador/instalar.sh --publico` y luego `sudo tailscale funnel --bg 8090`. Solo se expone `/api/`. Guía completa: [`frontend-web/VERCEL.md`](../frontend-web/VERCEL.md).
+
 ## Operación
 
 ```bash

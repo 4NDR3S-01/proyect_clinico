@@ -24,6 +24,12 @@ upstream clinica_web {
     server ${WEB_IP}:${WEB_PORT} max_fails=2 fail_timeout=15s;
 }
 
+# Las peticiones que llegan por Tailscale Funnel (bloque público) son HTTPS para el cliente.
+map $server_port $clinica_proto {
+    ${PUBLICO_PORT} https;
+    default         $scheme;
+}
+
 # Límite de intentos para login y recuperación de contraseña (por IP del cliente).
 limit_req_zone $binary_remote_addr zone=clinica_auth:10m rate=5r/s;
 
