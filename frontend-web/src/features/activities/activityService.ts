@@ -17,15 +17,15 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getActivities(params: ActivityFilters = {}): Promise<Activity[]> {
+export async function getActivities(params: ActivityFilters = {}, signal?: AbortSignal): Promise<Activity[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/actividades', { params })
+  const { data } = await apiClient.get<unknown>('/actividades', { params, ...(signal ? { signal } : {}) })
   return z.object({ data: z.array(activitySchema) }).parse(data).data
 }
 
-export async function getActivityTotal(params: ActivityPeriod): Promise<{ periodo: ActivityPeriod['periodo']; total: string }> {
+export async function getActivityTotal(params: ActivityPeriod, signal?: AbortSignal): Promise<{ periodo: ActivityPeriod['periodo']; total: string }> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/actividades/resumen', { params })
+  const { data } = await apiClient.get<unknown>('/actividades/resumen', { params, ...(signal ? { signal } : {}) })
   return z.object({ periodo: z.enum(['dia', 'semana', 'mes', 'anio']), total: z.string() }).parse(data)
 }
 

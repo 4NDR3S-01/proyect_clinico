@@ -15,15 +15,15 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getCashSummary(params: CashPeriod): Promise<CashSummary> {
+export async function getCashSummary(params: CashPeriod, signal?: AbortSignal): Promise<CashSummary> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/reportes/caja', { params })
+  const { data } = await apiClient.get<unknown>('/reportes/caja', { params, ...(signal ? { signal } : {}) })
   return summarySchema.parse(data)
 }
 
-export async function getExpenses(params: ExpenseFilters): Promise<Expense[]> {
+export async function getExpenses(params: ExpenseFilters, signal?: AbortSignal): Promise<Expense[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/egresos', { params })
+  const { data } = await apiClient.get<unknown>('/egresos', { params, ...(signal ? { signal } : {}) })
   return z.object({ data: z.array(expenseSchema) }).parse(data).data
 }
 

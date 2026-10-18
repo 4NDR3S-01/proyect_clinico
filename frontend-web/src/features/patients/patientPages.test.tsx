@@ -23,6 +23,21 @@ function renderDetail(path = '/pacientes/patient-id/historial', role: UserRole =
 }
 
 describe('patient views', () => {
+  it('restores the search and its fresh server result without another GET on return', async () => {
+    vi.mocked(getPatients).mockImplementation(async (params) => pageOf(params?.buscar ? [patient] : []))
+    const first = render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    await screen.findByText('No hay pacientes registrados.')
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: 'Nombre' } })
+    expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toBeInTheDocument()
+    expect(getPatients).toHaveBeenCalledTimes(2)
+    first.unmount()
+
+    render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    expect(screen.getByRole('searchbox', { name: 'Buscar pacientes' })).toHaveValue('Nombre')
+    expect(await screen.findByRole('link', { name: /Nombre recibido/ })).toBeInTheDocument()
+    expect(getPatients).toHaveBeenCalledTimes(2)
+  })
+
   it('shows loading and then only records received by GET /pacientes', async () => {
     let resolve!: (value: ReturnType<typeof pageOf>) => void
     vi.mocked(getPatients).mockReturnValue(new Promise((done) => { resolve = done }))
@@ -160,7 +175,7 @@ describe('patient views', () => {
     render(<MemoryRouter><PatientsPage/></MemoryRouter>)
     expect(await screen.findByRole('link', { name: /María López/ })).toBeInTheDocument()
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: query } })
-    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: query, page: 1 }))
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: query, page: 1 }, expect.any(AbortSignal)))
     expect(await screen.findByRole('link', { name: /Cédula:/ })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Cédula:/ })).toHaveAttribute('href', `/pacientes/${expectedId}/historial`)
     expect(getPatients).toHaveBeenCalledTimes(2)
@@ -182,7 +197,7 @@ describe('patient views', () => {
     expect(await screen.findByText('Página 1 de 2')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     expect(await screen.findByText('Página 2 de 2')).toBeInTheDocument()
-    expect(getPatients).toHaveBeenLastCalledWith({ page: 2 })
+    expect(getPatients).toHaveBeenLastCalledWith({ page: 2 }, expect.any(AbortSignal))
     expect(screen.getByRole('button', { name: 'Siguiente' })).toBeDisabled()
   })
 

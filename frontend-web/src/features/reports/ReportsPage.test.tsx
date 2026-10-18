@@ -29,7 +29,7 @@ describe('ReportsPage', () => {
     await waitFor(() => expect(getFinancialReport).toHaveBeenCalledTimes(1))
     fireEvent.change(screen.getByLabelText('Año'), { target: { value: '2024' } })
     fireEvent.click(screen.getByRole('button', { name: 'Consultar' }))
-    await waitFor(() => expect(getFinancialReport).toHaveBeenLastCalledWith(2024))
+    await waitFor(() => expect(getFinancialReport).toHaveBeenLastCalledWith(2024, expect.any(AbortSignal)))
   })
 
   it('shows a retryable error instead of zeroes when a report fails', async () => {

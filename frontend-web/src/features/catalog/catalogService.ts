@@ -26,9 +26,9 @@ const categoryPath = '/categorias-servicios'
 const servicePath = '/servicios-consultorio'
 const byId = (path: string, id: string) => `${path}/${encodeURIComponent(id)}`
 
-export async function getCategories(): Promise<ServiceCategory[]> {
+export async function getCategories(signal?: AbortSignal): Promise<ServiceCategory[]> {
   configured()
-  const { data } = await apiClient.get<unknown>(categoryPath)
+  const { data } = signal ? await apiClient.get<unknown>(categoryPath, { signal }) : await apiClient.get<unknown>(categoryPath)
   return z.object({ data: z.array(categorySchema) }).parse(data).data
 }
 export async function createCategory(nombre: string): Promise<ServiceCategory> {
@@ -46,9 +46,9 @@ export async function setCategoryActive(id: string, active: boolean): Promise<Se
   const { data } = await apiClient.put<unknown>(`${byId(categoryPath, id)}/${active ? 'activar' : 'desactivar'}`)
   return z.object({ message: z.string(), data: categorySchema }).parse(data).data
 }
-export async function getServices(): Promise<ConsultingService[]> {
+export async function getServices(signal?: AbortSignal): Promise<ConsultingService[]> {
   configured()
-  const { data } = await apiClient.get<unknown>(servicePath)
+  const { data } = signal ? await apiClient.get<unknown>(servicePath, { signal }) : await apiClient.get<unknown>(servicePath)
   return z.object({ data: z.array(serviceSchema) }).parse(data).data
 }
 export async function createService(values: ServiceValues): Promise<ConsultingService> {

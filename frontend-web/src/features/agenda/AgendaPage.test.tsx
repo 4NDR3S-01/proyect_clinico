@@ -22,7 +22,7 @@ describe('AgendaPage consultation', () => {
   it('shows only real records for the selected day and does not mix in personal entry controls', async () => {
     renderAgenda()
     selectOctober()
-    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(10, 2026))
+    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(10, 2026, expect.any(AbortSignal)))
     expect(screen.queryByRole('button', { name: 'Cita médica' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Actividad personal' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
@@ -49,7 +49,7 @@ describe('AgendaPage consultation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mes siguiente' }))
     expect(screen.getByRole('button', { name: /Seleccionar 1 de noviembre/ })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('heading', { name: 'Selecciona un día' })).toBeInTheDocument()
-    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(11, 2026))
+    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(11, 2026, expect.any(AbortSignal)))
   })
 
   it('keeps an honest empty day and retryable load error', async () => {

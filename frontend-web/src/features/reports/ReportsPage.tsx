@@ -1,23 +1,18 @@
-import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
 import { formatCurrency } from '../../utils/displayFormat'
 import { getClinicalReport, getEconomicReport, getFinancialReport, getIncomeReport } from './reportService'
+import { useClinicalQuery } from '../../services/clinicalQuery'
+import { useClinicalViewState } from '../../services/clinicalViewState'
+import type { QueryKey } from '@tanstack/react-query'
 
 type State<T> = { kind: 'loading' } | { kind: 'ready'; data: T } | { kind: 'error' }
 
-function useReport<T>(request: () => Promise<T>) {
-  const [state, setState] = useState<State<T>>({ kind: 'loading' })
-  const [reload, setReload] = useState(0)
-  useEffect(() => {
-    let active = true
-    void Promise.resolve().then(() => { setState({ kind: 'loading' }); return request() }).then(
-      (data) => { if (active) setState({ kind: 'ready', data }) },
-      () => { if (active) setState({ kind: 'error' }) },
-    )
-    return () => { active = false }
-  }, [request, reload])
-  return { state, retry: () => setReload((value) => value + 1) }
+function useReport<T>(key: QueryKey, request: (signal: AbortSignal) => Promise<T>) {
+  const query = useClinicalQuery(key, request)
+  const state: State<T> = query.data ? { kind: 'ready', data: query.data } : query.isError ? { kind: 'error' } : { kind: 'loading' }
+  return { state, retry: () => { void query.refetch() }, refreshError: query.data && query.isError }
 }
 
 function ReportPanel({ title, children }: { title: string; children: ReactNode }) {
@@ -25,10 +20,10 @@ function ReportPanel({ title, children }: { title: string; children: ReactNode }
   return <section aria-labelledby={id} className="admin-surface rounded-[20px] p-5 sm:p-7"><h2 className="text-xl font-semibold text-ink-950" id={id}>{title}</h2><div className="mt-5">{children}</div></section>
 }
 
-function ReportState<T>({ state, retry, children }: { state: State<T>; retry: () => void; children: (data: T) => ReactNode }) {
+function ReportState<T>({ state, retry, refreshError, children }: { state: State<T>; retry: () => void; refreshError?: boolean; children: (data: T) => ReactNode }) {
   if (state.kind === 'loading') return <LoadingState/>
   if (state.kind === 'error') return <ErrorState description="No fue posible cargar este reporte desde el servidor." onRetry={retry}/>
-  return children(state.data)
+  return <>{refreshError ? <p className="mb-3 text-sm text-red-700" role="alert">No fue posible actualizar este reporte. <button className="dashboard-retry" onClick={retry} type="button">Reintentar</button></p> : null}{children(state.data)}</>
 }
 
 function Value({ label, value }: { label: string; value: string }) {
@@ -36,13 +31,12 @@ function Value({ label, value }: { label: string; value: string }) {
 }
 
 export function ReportsPage() {
-  const [yearInput, setYearInput] = useState(String(new Date().getFullYear()))
-  const [year, setYear] = useState(new Date().getFullYear())
-  const financialRequest = useCallback(() => getFinancialReport(year), [year])
-  const clinical = useReport(getClinicalReport)
-  const economic = useReport(getEconomicReport)
-  const financial = useReport(financialRequest)
-  const income = useReport(getIncomeReport)
+  const [yearInput, setYearInput] = useClinicalViewState('reports.yearInput', () => String(new Date().getFullYear()))
+  const [year, setYear] = useClinicalViewState('reports.year', () => new Date().getFullYear())
+  const clinical = useReport(['reports', 'clinical'], getClinicalReport)
+  const economic = useReport(['reports', 'economic'], getEconomicReport)
+  const financial = useReport(['reports', 'financial', year], (signal) => getFinancialReport(year, signal))
+  const income = useReport(['reports', 'income'], getIncomeReport)
 
   return <div className="admin-reveal max-w-[1390px] space-y-6">
     <header><p className="admin-kicker">Análisis del consultorio</p><h1 className="admin-page-title mt-2">Reportes</h1><p className="admin-body mt-2">Indicadores calculados por el backend a partir de registros reales.</p></header>

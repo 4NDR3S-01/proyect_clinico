@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getProfilePhoto } from './profilePhotoService'
+import { useClinicalQuery } from '../../services/clinicalQuery'
 
 function photoUserId(value: string | null | undefined): string | null {
   if (!value) return null
@@ -14,21 +15,24 @@ function photoUserId(value: string | null | undefined): string | null {
 
 export function ProtectedPhoto({ photoUrl, name, className = '', fallbackText, onLoadError }: { photoUrl?: string | null; name: string; className?: string; fallbackText?: string; onLoadError?: () => void }) {
   const userId = photoUserId(photoUrl)
-  const [photo, setPhoto] = useState<{ userId: string; source: string } | null>(null)
+  const [photo, setPhoto] = useState<{ userId: string; blob: Blob; source: string } | null>(null)
+  const query = useClinicalQuery(['photo', userId], (signal) => getProfilePhoto(userId!, signal), { enabled: Boolean(userId), staleTime: 60_000 })
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !query.data) return
+    const blob = query.data
     let active = true
-    let objectUrl: string | null = null
-    void getProfilePhoto(userId).then((blob) => {
-      objectUrl = URL.createObjectURL(blob)
-      if (active) setPhoto({ userId, source: objectUrl })
-      else URL.revokeObjectURL(objectUrl)
-    }).catch(() => { if (active) { setPhoto(null); onLoadError?.() } })
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [userId, onLoadError])
+    let source: string | null = null
+    void Promise.resolve().then(() => {
+      if (!active) return
+      source = URL.createObjectURL(blob)
+      setPhoto({ userId, blob, source })
+    })
+    return () => { active = false; if (source) URL.revokeObjectURL(source) }
+  }, [userId, query.data])
+  useEffect(() => { if (query.isError) onLoadError?.() }, [query.isError, onLoadError])
 
   return <span aria-hidden="true" className={`admin-avatar grid shrink-0 place-items-center overflow-hidden ${className}`}>
-    {photo?.userId === userId ? <img alt="" className="size-full object-cover" src={photo.source}/> : fallbackText ?? name.trim().charAt(0).toLocaleUpperCase('es')}
+    {photo?.userId === userId && photo.blob === query.data ? <img alt="" className="size-full object-cover" src={photo.source}/> : fallbackText ?? name.trim().charAt(0).toLocaleUpperCase('es')}
   </span>
 }

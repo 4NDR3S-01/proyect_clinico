@@ -13,15 +13,15 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getRecordedActions(fecha?: string): Promise<RecordedAction[]> {
+export async function getRecordedActions(fecha?: string, signal?: AbortSignal): Promise<RecordedAction[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/configuracion/acciones', { params: fecha ? { fecha } : {} })
+  const { data } = await apiClient.get<unknown>('/configuracion/acciones', { params: fecha ? { fecha } : {}, ...(signal ? { signal } : {}) })
   return z.object({ acciones: z.array(actionSchema) }).parse(data).acciones
 }
 
-export async function getRecordedSessions(fecha?: string): Promise<RecordedSession[]> {
+export async function getRecordedSessions(fecha?: string, signal?: AbortSignal): Promise<RecordedSession[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/configuracion/sesiones', { params: fecha ? { fecha } : {} })
+  const { data } = await apiClient.get<unknown>('/configuracion/sesiones', { params: fecha ? { fecha } : {}, ...(signal ? { signal } : {}) })
   return z.object({ sesiones: z.array(sessionSchema) }).parse(data).sesiones
 }
 

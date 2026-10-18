@@ -1,14 +1,15 @@
 import { isAxiosError } from 'axios'
 import { Wallet } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { EmptyState } from '../../components/states/EmptyState'
 import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
 import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
 import { formatCurrency, formatDate } from '../../utils/displayFormat'
-import { createExpense, deleteExpense, getCashSummary, getExpenses, updateExpense, type CashPeriod, type CashSummary, type Expense, type ExpenseFilters, type ExpensePayload } from './cashService'
+import { createExpense, deleteExpense, getCashSummary, getExpenses, updateExpense, type CashPeriod, type Expense, type ExpenseFilters, type ExpensePayload } from './cashService'
+import { markClinicalQueriesStale, useClinicalQuery } from '../../services/clinicalQuery'
+import { useClinicalViewState } from '../../services/clinicalViewState'
 
-type CashState = { kind: 'loading' } | { kind: 'ready'; summary: CashSummary; expenses: Expense[] } | { kind: 'error'; message: string }
 type Dialog = { kind: 'create' | 'edit' | 'delete'; expense?: Expense }
 type PeriodKind = CashPeriod['periodo']
 const inputClass = 'admin-input mt-1 w-full text-sm'
@@ -46,26 +47,25 @@ function ExpenseForm({ expense, busy, error, onSave, onCancel }: { expense?: Exp
 
 export function CashPage() {
   const now = new Date()
-  const [period, setPeriod] = useState<PeriodKind>('mes')
-  const [date, setDate] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
-  const [month, setMonth] = useState(String(now.getMonth() + 1))
-  const [year, setYear] = useState(String(now.getFullYear()))
-  const [query, setQuery] = useState(() => filters('mes', date, month, year))
-  const [state, setState] = useState<CashState>({ kind: 'loading' })
+  const [period, setPeriod] = useClinicalViewState<PeriodKind>('cash.period', () => 'mes')
+  const [date, setDate] = useClinicalViewState('cash.date', () => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
+  const [month, setMonth] = useClinicalViewState('cash.month', () => String(now.getMonth() + 1))
+  const [year, setYear] = useClinicalViewState('cash.year', () => String(now.getFullYear()))
+  const [query, setQuery] = useClinicalViewState('cash.query', () => filters('mes', date, month, year))
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const pending = useRef(false)
   const trigger = useRef<HTMLElement | null>(null)
-  const requestId = useRef(0)
-  const load = useCallback(async (): Promise<boolean> => {
-    const id = ++requestId.current
-    setState({ kind: 'loading' })
-    try { const [summary, expenses] = await Promise.all([getCashSummary(query.summary), getExpenses(query.expenses)]); if (id === requestId.current) setState({ kind: 'ready', summary, expenses }); return true }
-    catch (error) { if (id === requestId.current) setState({ kind: 'error', message: errorMessage(error) }); return false }
-  }, [query])
-  useEffect(() => { const request = requestId; void Promise.resolve().then(load); return () => { request.current++ } }, [load])
+  const summaryQuery = useClinicalQuery(['cash', 'summary', query.summary], (signal) => getCashSummary(query.summary, signal))
+  const expensesQuery = useClinicalQuery(['cash', 'expenses', query.expenses], (signal) => getExpenses(query.expenses, signal))
+  const summary = summaryQuery.data
+  const load = async (): Promise<boolean> => {
+    await markClinicalQueriesStale(['cash'])
+    const [summary, expenses] = await Promise.all([summaryQuery.refetch(), expensesQuery.refetch()])
+    return summary.isSuccess && expenses.isSuccess
+  }
   const closeDialog = () => { if (pending.current) return; setDialog(null); setActionError(null); trigger.current?.focus() }
   const mutate = async (values?: ExpensePayload) => {
     if (!dialog || pending.current) return
@@ -76,6 +76,8 @@ export function CashPage() {
       else if (dialog.kind === 'edit' && dialog.expense && values) message = await updateExpense(dialog.expense.id, values)
       else if (dialog.kind === 'delete' && dialog.expense) message = await deleteExpense(dialog.expense.id)
       else return
+      void markClinicalQueriesStale(['dashboard-report'])
+      void markClinicalQueriesStale(['reports'])
       if (await load()) { setSuccess(message); setDialog(null); trigger.current?.focus() }
       else setActionError('El cambio se confirmó, pero no fue posible actualizar Caja. Reintenta la consulta.')
     } catch (error) { setActionError(errorMessage(error)) }
@@ -85,7 +87,10 @@ export function CashPage() {
   return <div className="admin-reveal max-w-[1390px] space-y-6"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="admin-kicker">Administración</p><h1 className="admin-page-title mt-2">Caja</h1><p className="admin-body mt-2">Resumen y egresos del período consultado.</p></div><button className="admin-primary min-h-11 rounded-lg px-5 text-sm font-semibold" onClick={(event) => open({ kind: 'create' }, event.currentTarget)} type="button">Registrar egreso</button></header>
     {success ? <p className="admin-success rounded-lg p-4 text-sm" role="status">{success}</p> : null}
     <section aria-label="Filtros de Caja" className="admin-surface rounded-[20px] p-5"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><label className="text-sm font-medium text-ink-950">Período<select className={inputClass} onChange={(event) => setPeriod(event.target.value as PeriodKind)} value={period}><option value="dia">Día</option><option value="semana">Semana</option><option value="mes">Mes</option><option value="anio">Año</option></select></label>{period === 'dia' || period === 'semana' ? <label className="text-sm font-medium text-ink-950">Fecha<input className={inputClass} onChange={(event) => setDate(event.target.value)} type="date" value={date}/></label> : null}{period === 'mes' ? <label className="text-sm font-medium text-ink-950">Mes<select className={inputClass} onChange={(event) => setMonth(event.target.value)} value={month}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Intl.DateTimeFormat('es-EC', { month: 'long' }).format(new Date(now.getFullYear(), index, 1))}</option>)}</select></label> : null}{period === 'mes' || period === 'anio' ? <label className="text-sm font-medium text-ink-950">Año<input className={inputClass} onChange={(event) => setYear(event.target.value)} type="number" value={year}/></label> : null}<button className="admin-secondary min-h-11 self-end rounded-lg px-4 text-sm font-semibold" onClick={() => { if ((period === 'dia' || period === 'semana') && !date) return; if ((period === 'mes' || period === 'anio') && !year) return; setQuery(filters(period, date, month, year)) }} type="button">Aplicar filtros</button></div></section>
-    {state.kind === 'loading' ? <LoadingState/> : state.kind === 'error' ? <ErrorState description={state.message} onRetry={() => { void load() }}/> : <><section aria-label="Resumen de Caja" className="grid gap-4 sm:grid-cols-3">{(['ingresos', 'egresos', 'saldo'] as const).map((field) => <div className="admin-surface rounded-[20px] p-5" key={field}><p className="admin-kicker capitalize">{field}</p><p className="mt-2 text-2xl font-bold text-ink-950">{formatCurrency(state.summary[field])}</p></div>)}</section><section aria-labelledby="expenses-title" className="admin-surface rounded-[20px] p-5 sm:p-6"><h2 className="text-xl font-semibold text-ink-950" id="expenses-title">Egresos</h2>{state.expenses.length === 0 ? <div className="mt-5"><EmptyState description="Sin egresos para el período seleccionado." icon={Wallet} title="Sin egresos en esta vista"/></div> : <ul className="mt-4 divide-y divide-[#dbe6f2]">{state.expenses.map((expense) => <li className="flex flex-wrap items-center justify-between gap-4 py-4" key={expense.id}><div><p className="font-semibold text-ink-950">{expense.concepto}</p><p className="admin-muted text-sm">{formatDate(expense.fecha)} · {formatCurrency(expense.monto)}</p></div><div className="flex gap-2"><button className="admin-secondary min-h-11 rounded-lg px-3 text-sm font-semibold" onClick={(event) => open({ kind: 'edit', expense }, event.currentTarget)} type="button">Editar</button><button className="min-h-11 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700" onClick={(event) => open({ kind: 'delete', expense }, event.currentTarget)} type="button">Eliminar</button></div></li>)}</ul>}</section></>}
+    {summary ? <section aria-label="Resumen de Caja" className="grid gap-4 sm:grid-cols-3">{(['ingresos', 'egresos', 'saldo'] as const).map((field) => <div className="admin-surface rounded-[20px] p-5" key={field}><p className="admin-kicker capitalize">{field}</p><p className="mt-2 text-2xl font-bold text-ink-950">{formatCurrency(summary[field])}</p></div>)}</section> : summaryQuery.isError ? <ErrorState description={errorMessage(summaryQuery.error)} onRetry={() => { void summaryQuery.refetch() }}/> : <LoadingState/>}
+    {expensesQuery.data ? <section aria-labelledby="expenses-title" className="admin-surface rounded-[20px] p-5 sm:p-6"><h2 className="text-xl font-semibold text-ink-950" id="expenses-title">Egresos</h2>{expensesQuery.data.length === 0 ? <div className="mt-5"><EmptyState description="Sin egresos para el período seleccionado." icon={Wallet} title="Sin egresos en esta vista"/></div> : <ul className="mt-4 divide-y divide-[#dbe6f2]">{expensesQuery.data.map((expense) => <li className="flex flex-wrap items-center justify-between gap-4 py-4" key={expense.id}><div><p className="font-semibold text-ink-950">{expense.concepto}</p><p className="admin-muted text-sm">{formatDate(expense.fecha)} · {formatCurrency(expense.monto)}</p></div><div className="flex gap-2"><button className="admin-secondary min-h-11 rounded-lg px-3 text-sm font-semibold" onClick={(event) => open({ kind: 'edit', expense }, event.currentTarget)} type="button">Editar</button><button className="min-h-11 rounded-lg border border-red-200 px-3 text-sm font-semibold text-red-700" onClick={(event) => open({ kind: 'delete', expense }, event.currentTarget)} type="button">Eliminar</button></div></li>)}</ul>}</section> : expensesQuery.isError ? <ErrorState description={errorMessage(expensesQuery.error)} onRetry={() => { void expensesQuery.refetch() }}/> : <LoadingState/>}
+    {summaryQuery.data && summaryQuery.isError ? <p className="text-sm text-red-700" role="alert">No fue posible actualizar el resumen. <button className="dashboard-retry" onClick={() => { void summaryQuery.refetch() }} type="button">Reintentar</button></p> : null}
+    {expensesQuery.data && expensesQuery.isError ? <p className="text-sm text-red-700" role="alert">No fue posible actualizar los egresos. <button className="dashboard-retry" onClick={() => { void expensesQuery.refetch() }} type="button">Reintentar</button></p> : null}
     {dialog ? <AccessibleDialog busy={busy} onClose={closeDialog} title={dialog.kind === 'create' ? 'Registrar egreso' : dialog.kind === 'edit' ? 'Editar egreso' : 'Eliminar egreso'} titleId="expense-dialog-title">{dialog.kind === 'delete' ? <div><p className="admin-body text-sm">¿Eliminar este egreso?</p>{actionError ? <p className="mt-4 text-sm text-red-700" role="alert">{actionError}</p> : null}<div className="mt-6 flex gap-3"><button className="min-h-11 rounded-lg bg-red-700 px-4 text-sm font-semibold text-white disabled:opacity-60" data-dialog-initial disabled={busy} onClick={() => { void mutate() }} type="button">{busy ? 'Eliminando…' : 'Confirmar eliminación'}</button><button className="admin-secondary min-h-11 rounded-lg px-4 text-sm font-semibold" disabled={busy} onClick={closeDialog} type="button">Volver</button></div></div> : <ExpenseForm busy={busy} error={actionError} key={dialog.expense?.id ?? 'new'} onCancel={closeDialog} onSave={mutate} expense={dialog.expense}/>}</AccessibleDialog> : null}
   </div>
 }

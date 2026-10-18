@@ -27,14 +27,14 @@ export type FinancialReport = z.infer<typeof financialSchema>
 export type IncomeReport = z.infer<typeof incomeSchema>
 export type DashboardReport = z.infer<typeof dashboardSchema>
 
-async function getReport<T extends z.ZodType>(path: string, schema: T, params?: Record<string, number>): Promise<z.infer<T>> {
+async function getReport<T extends z.ZodType>(path: string, schema: T, params?: Record<string, number>, signal?: AbortSignal): Promise<z.infer<T>> {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
-  const { data } = await apiClient.get<unknown>(path, { params })
+  const { data } = await apiClient.get<unknown>(path, { params, ...(signal ? { signal } : {}) })
   return schema.parse(data)
 }
 
-export const getClinicalReport = () => getReport('/reportes/clinicos', clinicalSchema)
-export const getEconomicReport = () => getReport('/reportes/economicos', balance)
-export const getFinancialReport = (anio: number) => getReport('/reportes/financieros', financialSchema, { anio })
-export const getIncomeReport = () => getReport('/reportes/ingresos', incomeSchema)
-export const getDashboardReport = () => getReport('/reportes/dashboard', dashboardSchema)
+export const getClinicalReport = (signal?: AbortSignal) => getReport('/reportes/clinicos', clinicalSchema, undefined, signal)
+export const getEconomicReport = (signal?: AbortSignal) => getReport('/reportes/economicos', balance, undefined, signal)
+export const getFinancialReport = (anio: number, signal?: AbortSignal) => getReport('/reportes/financieros', financialSchema, { anio }, signal)
+export const getIncomeReport = (signal?: AbortSignal) => getReport('/reportes/ingresos', incomeSchema, undefined, signal)
+export const getDashboardReport = (signal?: AbortSignal) => getReport('/reportes/dashboard', dashboardSchema, undefined, signal)

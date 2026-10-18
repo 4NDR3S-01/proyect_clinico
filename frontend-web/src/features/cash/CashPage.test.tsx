@@ -9,6 +9,14 @@ const expense = { id: 'expense-1', fecha: '2026-10-04', concepto: 'Material reci
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getCashSummary).mockResolvedValue(summary); vi.mocked(getExpenses).mockResolvedValue([expense]) })
 
 describe('CashPage', () => {
+  it('keeps the real expense list available when only the summary request fails', async () => {
+    vi.mocked(getCashSummary).mockRejectedValue(new Error('network'))
+    render(<CashPage/>)
+    expect(await screen.findByText('Material recibido')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('No fue posible completar la operación.')
+    expect(screen.queryByRole('region', { name: 'Resumen de Caja' })).not.toBeInTheDocument()
+  })
+
   it('displays totals from backend and sends selected filters', async () => {
     render(<CashPage/>)
     expect(await screen.findByText('$140.00')).toBeInTheDocument()
@@ -19,8 +27,8 @@ describe('CashPage', () => {
     fireEvent.change(within(filterArea).getByLabelText('Período'), { target: { value: 'dia' } })
     fireEvent.change(within(filterArea).getByLabelText('Fecha'), { target: { value: '2026-10-03' } })
     fireEvent.click(within(filterArea).getByRole('button', { name: 'Aplicar filtros' }))
-    await waitFor(() => expect(getCashSummary).toHaveBeenLastCalledWith({ periodo: 'dia', fecha: '2026-10-03' }))
-    expect(getExpenses).toHaveBeenLastCalledWith({ fecha: '2026-10-03' })
+    await waitFor(() => expect(getCashSummary).toHaveBeenLastCalledWith({ periodo: 'dia', fecha: '2026-10-03' }, expect.any(AbortSignal)))
+    expect(getExpenses).toHaveBeenLastCalledWith({ fecha: '2026-10-03' }, expect.any(AbortSignal))
   })
 
   it('creates an expense and refreshes summary and list', async () => {

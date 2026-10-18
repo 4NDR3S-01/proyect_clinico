@@ -23,15 +23,15 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getAgendaMonth(mes: number, anio: number): Promise<AgendaEntry[]> {
+export async function getAgendaMonth(mes: number, anio: number, signal?: AbortSignal): Promise<AgendaEntry[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/agenda', { params: { mes, anio } })
+  const { data } = await apiClient.get<unknown>('/agenda', { params: { mes, anio }, ...(signal ? { signal } : {}) })
   return listSchema.parse(data).data
 }
 
-export async function getPendingRequests(): Promise<AgendaEntry[]> {
+export async function getPendingRequests(signal?: AbortSignal): Promise<AgendaEntry[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/agenda', { params: { estado: 'pendiente' } })
+  const { data } = await apiClient.get<unknown>('/agenda', { params: { estado: 'pendiente' }, ...(signal ? { signal } : {}) })
   return listSchema.parse(data).data
 }
 

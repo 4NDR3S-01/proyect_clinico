@@ -17,10 +17,10 @@ describe('SystemActivityPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sesiones' }))
     expect(await screen.findByText('login')).toBeInTheDocument()
     expect(screen.getByText(/4 de octubre de 2026 · 09:00/)).toBeInTheDocument()
-    expect(getRecordedSessions).toHaveBeenCalledWith(undefined)
+    expect(getRecordedSessions).toHaveBeenCalledWith(undefined, expect.any(AbortSignal))
     fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-03' } })
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar fecha' }))
-    await waitFor(() => expect(getRecordedSessions).toHaveBeenLastCalledWith('2026-10-03'))
+    await waitFor(() => expect(getRecordedSessions).toHaveBeenLastCalledWith('2026-10-03', expect.any(AbortSignal)))
   })
 
   it('confirms hiding an action and refetches the visible list', async () => {

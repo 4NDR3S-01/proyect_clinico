@@ -11,6 +11,14 @@ beforeEach(() => { vi.resetAllMocks(); vi.mocked(getActivities).mockResolvedValu
 function renderPage(role: UserRole) { render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><ActivitiesPage/></AuthContext.Provider>) }
 
 describe('ActivitiesPage', () => {
+  it('keeps received activities visible when only the period total fails', async () => {
+    vi.mocked(getActivityTotal).mockRejectedValue(new Error('network'))
+    renderPage('doctora')
+    expect(await screen.findByText('Consulta registrada')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('No fue posible completar la operación.')
+    expect(screen.queryByText('Total general del período')).not.toBeInTheDocument()
+  })
+
   it('shows backend records and the backend period total without granting write to assistant', async () => {
     vi.mocked(getActivityTotal).mockResolvedValue({ periodo: 'mes', total: '40.50' })
     renderPage('asistente')
@@ -60,7 +68,7 @@ describe('ActivitiesPage', () => {
     await screen.findByText('Consulta registrada')
     fireEvent.change(screen.getByLabelText('Código de paciente para filtrar'), { target: { value: '001' } })
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
-    await waitFor(() => expect(getActivities).toHaveBeenCalledWith(expect.objectContaining({ codigo_paciente: '001' })))
+    await waitFor(() => expect(getActivities).toHaveBeenCalledWith(expect.objectContaining({ codigo_paciente: '001' }), expect.any(AbortSignal)))
     expect(screen.getByText('Total general del período')).toBeInTheDocument()
     expect(getActivityTotal).not.toHaveBeenCalledWith(expect.objectContaining({ codigo_paciente: '001' }))
   })

@@ -1,6 +1,6 @@
 import { ArrowUpRight, Plus, Search, UsersRound } from 'lucide-react'
 import { isAxiosError } from 'axios'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ZodError } from 'zod'
 import { EmptyState } from '../../components/states/EmptyState'
@@ -11,39 +11,30 @@ import { createPatient, getPatients, type CreatePatientPayload, type PatientPage
 import { patientLoadError } from './patientLoadError'
 import { PatientCreateForm } from './PatientCreateForm'
 import { ProtectedPhoto } from '../auth/ProtectedPhoto'
+import { invalidateClinicalQueries, markClinicalQueriesStale, useClinicalQuery } from '../../services/clinicalQuery'
+import { useClinicalViewState } from '../../services/clinicalViewState'
 
 type PatientsState = { kind: 'loading' } | { kind: 'ready'; page: PatientPage } | { kind: 'error'; message: string }
 
 export function PatientsPage() {
-  const [state, setState] = useState<PatientsState>({ kind: 'loading' })
   const [createOpen, setCreateOpen] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [reload, setReload] = useState(0)
-  const requestId = useRef(0)
+  const [search, setSearch] = useClinicalViewState('patients.search', () => '')
+  const [page, setPage] = useClinicalViewState('patients.page', () => 1)
+  const [debouncedSearch, setDebouncedSearch] = useState(search.trim())
   const submitPending = useRef(false)
   const createTrigger = useRef<HTMLButtonElement>(null)
 
-  const fetchPatients = useCallback((buscar: string, requestedPage: number) => {
-    const id = ++requestId.current
-    return getPatients({ ...(buscar ? { buscar } : {}), page: requestedPage }).then(
-      (result) => { if (id === requestId.current) setState({ kind: 'ready', page: result }) },
-      (error: unknown) => { if (id === requestId.current) setState({ kind: 'error', message: patientLoadError(error) }) },
-    )
-  }, [])
-
-  const load = () => {
-    setState({ kind: 'loading' })
-    setReload((value) => value + 1)
-  }
-
   useEffect(() => {
-    const requests = requestId
-    const timer = window.setTimeout(() => { void fetchPatients(search.trim(), page) }, 250)
-    return () => { window.clearTimeout(timer); requests.current++ }
-  }, [fetchPatients, search, page, reload])
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [search])
+  const query = useClinicalQuery(['patients', debouncedSearch, page], (signal) => getPatients({ ...(debouncedSearch ? { buscar: debouncedSearch } : {}), page }, signal))
+  const state: PatientsState = search.trim() !== debouncedSearch ? { kind: 'loading' }
+    : query.data ? { kind: 'ready', page: query.data }
+      : query.isError ? { kind: 'error', message: patientLoadError(query.error) } : { kind: 'loading' }
+  const load = () => { void query.refetch() }
 
   const closeCreate = () => {
     if (submitPending.current) return
@@ -64,12 +55,14 @@ export function PatientsPage() {
       closeCreate()
       setSearch('')
       setPage(1)
-      load()
+      void invalidateClinicalQueries(['patients'])
+      void markClinicalQueriesStale(['dashboard-report'])
+      void markClinicalQueriesStale(['reports'])
       return true
     } catch (error) {
       if (error instanceof ZodError) {
         setCreateError('La respuesta del servidor no permite verificar el registro. Revisa el listado antes de intentarlo de nuevo.')
-        load()
+        void invalidateClinicalQueries(['patients'])
       } else if (isAxiosError(error) && !error.response) {
         setCreateError('No fue posible comunicarse con el servidor. Inténtalo de nuevo.')
       } else if (isAxiosError(error) && error.response?.status === 422) {
@@ -98,7 +91,9 @@ export function PatientsPage() {
       </div>
       {success ? <p className="admin-state admin-success mb-6 rounded-xl p-4 text-sm" role="status">{success}</p> : null}
       {createOpen ? <AccessibleDialog onClose={closeCreate} title="Registrar paciente" titleId="create-patient-title"><PatientCreateForm error={createError} onCancel={closeCreate} onCreate={onCreate}/></AccessibleDialog> : null}
-      <div className="mb-5 w-full sm:max-w-[360px]"><label className="admin-meta text-xs font-semibold" htmlFor="patient-search">Buscar pacientes</label><div className="relative mt-1"><Search aria-hidden="true" className="admin-meta pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={17}/><input className="admin-input admin-search-input w-full text-sm focus-visible:outline-2 focus-visible:outline-offset-2" id="patient-search" maxLength={255} onChange={(event) => { setState({ kind: 'loading' }); setSearch(event.target.value); setPage(1) }} placeholder="Nombre, cédula o código" type="search" value={search}/></div></div>
+      <div className="mb-5 w-full sm:max-w-[360px]"><label className="admin-meta text-xs font-semibold" htmlFor="patient-search">Buscar pacientes</label><div className="relative mt-1"><Search aria-hidden="true" className="admin-meta pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" size={17}/><input className="admin-input admin-search-input w-full text-sm focus-visible:outline-2 focus-visible:outline-offset-2" id="patient-search" maxLength={255} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Nombre, cédula o código" type="search" value={search}/></div></div>
+      {query.isFetching && state.kind === 'ready' ? <p className="admin-muted mb-3 text-sm" role="status">Actualizando pacientes…</p> : null}
+      {query.isError && state.kind === 'ready' ? <p className="mb-3 text-sm text-red-700" role="alert">{patientLoadError(query.error)} <button className="dashboard-retry" onClick={load} type="button">Reintentar</button></p> : null}
       {state.kind === 'loading' ? <div className="mt-6"><LoadingState/></div> : null}
       {state.kind === 'error' ? <div className="mt-6"><ErrorState description={state.message} onRetry={load}/></div> : null}
       {state.kind === 'ready' && state.page.data.length === 0 ? (
@@ -118,7 +113,7 @@ export function PatientsPage() {
                 </Link>
               ))}
             </section>
-          <nav aria-label="Páginas de pacientes" className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6edf6] px-5 py-4 sm:px-7"><span className="admin-muted text-sm">Página {state.page.current_page} de {state.page.last_page}</span><div className="flex gap-2"><button className="admin-secondary min-h-11 rounded-lg px-4 text-sm font-semibold disabled:opacity-50" disabled={!state.page.prev_page_url} onClick={() => { setState({ kind: 'loading' }); setPage(state.page.current_page - 1) }} type="button">Anterior</button><button className="admin-secondary min-h-11 rounded-lg px-4 text-sm font-semibold disabled:opacity-50" disabled={!state.page.next_page_url} onClick={() => { setState({ kind: 'loading' }); setPage(state.page.current_page + 1) }} type="button">Siguiente</button></div></nav>
+          <nav aria-label="Páginas de pacientes" className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6edf6] px-5 py-4 sm:px-7"><span className="admin-muted text-sm">Página {state.page.current_page} de {state.page.last_page}</span><div className="flex gap-2"><button className="admin-secondary min-h-11 rounded-lg px-4 text-sm font-semibold disabled:opacity-50" disabled={!state.page.prev_page_url} onClick={() => { setPage(state.page.current_page - 1) }} type="button">Anterior</button><button className="admin-secondary min-h-11 rounded-lg px-4 text-sm font-semibold disabled:opacity-50" disabled={!state.page.next_page_url} onClick={() => { setPage(state.page.current_page + 1) }} type="button">Siguiente</button></div></nav>
         </div>
       ) : null}
     </div>

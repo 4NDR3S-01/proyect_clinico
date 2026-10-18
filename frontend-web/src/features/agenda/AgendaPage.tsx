@@ -1,12 +1,14 @@
 import { isAxiosError } from 'axios'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
 import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
 import { formatDate } from '../../utils/displayFormat'
 import { useAuth } from '../auth/authContext'
 import { createMedicalAppointment, getAgendaMonth, type AgendaEntry } from './agendaService'
+import { markClinicalQueriesStale, useClinicalQuery } from '../../services/clinicalQuery'
+import { useClinicalViewState } from '../../services/clinicalViewState'
 
 type AgendaState = { kind: 'loading' } | { kind: 'ready'; entries: AgendaEntry[] } | { kind: 'error'; message: string }
 const two = (value: number) => String(value).padStart(2, '0')
@@ -45,30 +47,22 @@ function AppointmentForm({ date, busy, error, onCancel, onSave }: { date: string
 export function AgendaPage() {
   const { user } = useAuth()
   const now = new Date()
-  const [month, setMonth] = useState({ year: now.getFullYear(), value: now.getMonth() + 1 })
-  const [selectedDate, setSelectedDate] = useState(dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate()))
-  const [daySelected, setDaySelected] = useState(false)
-  const [state, setState] = useState<AgendaState>({ kind: 'loading' })
+  const [month, setMonth] = useClinicalViewState('agenda.month', () => ({ year: now.getFullYear(), value: now.getMonth() + 1 }))
+  const [selectedDate, setSelectedDate] = useClinicalViewState('agenda.date', () => dateKey(now.getFullYear(), now.getMonth() + 1, now.getDate()))
+  const [daySelected, setDaySelected] = useClinicalViewState('agenda.daySelected', () => false)
   const [appointmentOpen, setAppointmentOpen] = useState(false)
   const [appointmentBusy, setAppointmentBusy] = useState(false)
   const [appointmentError, setAppointmentError] = useState<string | null>(null)
   const [appointmentSuccess, setAppointmentSuccess] = useState<string | null>(null)
   const appointmentPending = useRef(false)
   const appointmentTrigger = useRef<HTMLButtonElement>(null)
-  const requestId = useRef(0)
-  const load = useCallback(async (): Promise<boolean> => {
-    const id = ++requestId.current
-    setState({ kind: 'loading' })
-    try {
-      const entries = await getAgendaMonth(month.value, month.year)
-      if (id === requestId.current) setState({ kind: 'ready', entries })
-      return true
-    } catch {
-      if (id === requestId.current) setState({ kind: 'error', message: 'No fue posible cargar la agenda. Inténtalo de nuevo.' })
-      return false
-    }
-  }, [month.value, month.year])
-  useEffect(() => { const request = requestId; void Promise.resolve().then(load); return () => { request.current++ } }, [load])
+  const query = useClinicalQuery(['agenda', month.value, month.year], (signal) => getAgendaMonth(month.value, month.year, signal))
+  const state: AgendaState = query.data ? { kind: 'ready', entries: query.data }
+    : query.isError ? { kind: 'error', message: 'No fue posible cargar la agenda. Inténtalo de nuevo.' } : { kind: 'loading' }
+  const load = async (): Promise<boolean> => {
+    await markClinicalQueriesStale(['agenda'])
+    return (await query.refetch()).isSuccess
+  }
 
   const selectMonth = (year: number, value: number) => {
     setMonth({ year, value })
@@ -91,6 +85,8 @@ export function AgendaPage() {
     appointmentPending.current = true; setAppointmentBusy(true); setAppointmentError(null)
     try {
       await createMedicalAppointment(values)
+      void markClinicalQueriesStale(['dashboard-report'])
+      void markClinicalQueriesStale(['reports'])
       const refreshed = await load()
       setAppointmentOpen(false)
       setAppointmentSuccess(refreshed ? 'Cita médica registrada correctamente.' : 'La cita se registró, pero no fue posible actualizar el calendario. Reintenta la consulta antes de agendar otra.')
@@ -102,6 +98,8 @@ export function AgendaPage() {
   return <div className="admin-reveal max-w-[1390px] space-y-6">
     <header><p className="admin-kicker">Organización clínica</p><h1 className="admin-page-title mt-2">Agenda</h1><p className="admin-body mt-2">Consulta los registros existentes del calendario.</p></header>
     {state.kind === 'error' ? <ErrorState description={state.message} onRetry={() => { void load() }}/> : null}
+    {state.kind === 'ready' && query.isFetching ? <p className="admin-muted text-sm" role="status">Actualizando agenda…</p> : null}
+    {state.kind === 'ready' && query.isError ? <p className="text-sm text-red-700" role="alert">No fue posible actualizar la agenda. <button className="dashboard-retry" onClick={() => { void load() }} type="button">Reintentar</button></p> : null}
     {appointmentSuccess ? <p className="admin-success rounded-xl p-4 text-sm" role="status">{appointmentSuccess}</p> : null}
     {appointmentOpen ? <AccessibleDialog busy={appointmentBusy} onClose={closeAppointment} title="Agendar cita médica" titleId="agenda-appointment-title"><AppointmentForm busy={appointmentBusy} date={selectedDate} error={appointmentError} onCancel={closeAppointment} onSave={(values) => { void saveAppointment(values) }}/></AccessibleDialog> : null}
     <div className="flex justify-end"><div className="flex items-center gap-2"><button aria-label="Mes anterior" className="admin-secondary grid size-11 place-items-center rounded-lg" onClick={() => shiftMonth(-1)} type="button"><ChevronLeft aria-hidden="true" size={18}/></button><label className="text-xs font-semibold text-ink-950">Mes<input aria-label="Mes" className="admin-input ml-2 text-sm" onChange={(event) => { if (!event.target.value) return; const [year, value] = event.target.value.split('-').map(Number); selectMonth(year, value) }} type="month" value={`${month.year}-${two(month.value)}`}/></label><button aria-label="Mes siguiente" className="admin-secondary grid size-11 place-items-center rounded-lg" onClick={() => shiftMonth(1)} type="button"><ChevronRight aria-hidden="true" size={18}/></button></div></div>

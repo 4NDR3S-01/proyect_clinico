@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, type ChangeEvent } from 'react'
 import { ProtectedPhoto } from './ProtectedPhoto'
 import { useAuth } from './authContext'
 import { deleteProfilePhoto, uploadProfilePhoto } from './profilePhotoService'
+import { removeClinicalQueries } from '../../services/clinicalQuery'
 
 const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const roleLabels = { doctora: 'Doctora', asistente: 'Asistente', paciente: 'Paciente' }
@@ -43,6 +44,7 @@ export function ProfilePhotoControl({ initialPhotoUrl, onBusyChange }: { initial
     setPending(true); setError(null)
     try {
       const next = await uploadProfilePhoto(file)
+      removeClinicalQueries(['photo', user.id])
       setPhotoUrl(next)
       setRevision((value) => value + 1)
       setLoadError(false)
@@ -55,6 +57,7 @@ export function ProfilePhotoControl({ initialPhotoUrl, onBusyChange }: { initial
     setPending(true); setError(null)
     try {
       const next = await deleteProfilePhoto()
+      removeClinicalQueries(['photo', user.id])
       setPhotoUrl(next)
       setConfirmDelete(false)
       setLoadError(false)

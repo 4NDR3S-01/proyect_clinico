@@ -20,7 +20,7 @@ describe('ProfilePhotoControl', () => {
     vi.mocked(getProfilePhoto).mockResolvedValue(new Blob(['photo'], { type: 'image/png' }))
     const view = renderControl()
     await waitFor(() => expect(document.querySelector('img')).toHaveAttribute('src', 'blob:protected-photo'))
-    expect(getProfilePhoto).toHaveBeenCalledExactlyOnceWith(user.id)
+    expect(getProfilePhoto).toHaveBeenCalledExactlyOnceWith(user.id, expect.any(AbortSignal))
     view.unmount()
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:protected-photo')
   })

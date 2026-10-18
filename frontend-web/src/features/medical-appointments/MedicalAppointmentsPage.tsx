@@ -1,5 +1,5 @@
 import { isAxiosError } from 'axios'
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { EmptyState } from '../../components/states/EmptyState'
 import { ErrorState } from '../../components/states/ErrorState'
 import { LoadingState } from '../../components/states/LoadingState'
@@ -7,6 +7,8 @@ import { AccessibleDialog } from '../../components/ui/AccessibleDialog'
 import { formatDate } from '../../utils/displayFormat'
 import { CalendarDays } from 'lucide-react'
 import { cancelAppointment, completeAppointment, deleteAgendaEntry, getAgendaMonth, getPendingRequests, programRequest, registerClinicalData, updateAgendaEntry, type AgendaEntry, type AgendaSlot, type ClinicalDataPayload } from '../agenda/agendaService'
+import { markClinicalQueriesStale, useClinicalQuery } from '../../services/clinicalQuery'
+import { useClinicalViewState } from '../../services/clinicalViewState'
 
 type PageState = { kind: 'loading' } | { kind: 'ready'; entries: AgendaEntry[]; pending: AgendaEntry[] } | { kind: 'error'; message: string }
 type DialogKind = 'program' | 'edit' | 'clinical' | 'cancel' | 'complete' | 'delete'
@@ -102,9 +104,8 @@ function ClinicalDataForm({ entry, busy, error, onSave, onCancel }: {
 
 export function MedicalAppointmentsPage() {
   const now = new Date()
-  const [month, setMonth] = useState({ year: now.getFullYear(), value: now.getMonth() + 1 })
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos')
-  const [state, setState] = useState<PageState>({ kind: 'loading' })
+  const [month, setMonth] = useClinicalViewState('appointments.month', () => ({ year: now.getFullYear(), value: now.getMonth() + 1 }))
+  const [statusFilter, setStatusFilter] = useClinicalViewState<StatusFilter>('appointments.status', () => 'todos')
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -112,20 +113,15 @@ export function MedicalAppointmentsPage() {
   const pendingMutation = useRef(false)
   const dialogTrigger = useRef<HTMLElement | null>(null)
   const pageHeading = useRef<HTMLHeadingElement>(null)
-  const requestId = useRef(0)
-  const load = useCallback(async (): Promise<boolean> => {
-    const id = ++requestId.current
-    setState({ kind: 'loading' })
-    try {
-      const [entries, pending] = await Promise.all([getAgendaMonth(month.value, month.year), getPendingRequests()])
-      if (id === requestId.current) setState({ kind: 'ready', entries, pending })
-      return true
-    } catch (error) {
-      if (id === requestId.current) setState({ kind: 'error', message: errorMessage(error) })
-      return false
-    }
-  }, [month.value, month.year])
-  useEffect(() => { const request = requestId; void Promise.resolve().then(load); return () => { request.current++ } }, [load])
+  const agendaQuery = useClinicalQuery(['agenda', month.value, month.year], (signal) => getAgendaMonth(month.value, month.year, signal))
+  const pendingQuery = useClinicalQuery(['agenda', 'pending'], getPendingRequests)
+  const state: PageState = agendaQuery.data ? { kind: 'ready', entries: agendaQuery.data, pending: pendingQuery.data ?? [] }
+    : agendaQuery.isError ? { kind: 'error', message: errorMessage(agendaQuery.error) } : { kind: 'loading' }
+  const load = async (): Promise<boolean> => {
+    await markClinicalQueriesStale(['agenda'])
+    const [agenda, pending] = await Promise.all([agendaQuery.refetch(), pendingQuery.refetch()])
+    return agenda.isSuccess && pending.isSuccess
+  }
 
   const openDialog = (next: DialogState, trigger: HTMLElement) => { dialogTrigger.current = trigger; setActionError(null); setDialog(next) }
   const closeDialog = () => { if (pendingMutation.current) return; setDialog(null); setActionError(null); dialogTrigger.current?.focus() }
@@ -140,6 +136,8 @@ export function MedicalAppointmentsPage() {
       else if (dialog.kind === 'complete') message = await completeAppointment(dialog.entry.id)
       else if (dialog.kind === 'delete') message = await deleteAgendaEntry(dialog.entry.id)
       else return
+      void markClinicalQueriesStale(['dashboard-report'])
+      void markClinicalQueriesStale(['reports'])
       if (await load()) { setSuccess(message); setDialog(null); pageHeading.current?.focus() }
       else setActionError('El cambio se confirmó, pero no fue posible actualizar las citas. Reintenta la consulta.')
     } catch (error) { setActionError(errorMessage(error)) }
@@ -150,6 +148,7 @@ export function MedicalAppointmentsPage() {
     pendingMutation.current = true; setBusy(true); setActionError(null)
     try {
       const message = await registerClinicalData(dialog.entry.id, values)
+      void markClinicalQueriesStale(['reports'])
       if (await load()) { setSuccess(message); setDialog(null); pageHeading.current?.focus() }
       else setActionError('El cambio se confirmó, pero no fue posible actualizar las citas. Reintenta la consulta.')
     } catch (error) { setActionError(errorMessage(error)) }
@@ -161,6 +160,8 @@ export function MedicalAppointmentsPage() {
   return <div className="admin-reveal max-w-[1390px] space-y-6">
     <header><p className="admin-kicker">Organización clínica</p><h1 className="admin-page-title mt-2 focus-visible:outline-2 focus-visible:outline-offset-2" ref={pageHeading} tabIndex={-1}>Citas médicas</h1><p className="admin-body mt-2">Consulta y gestión de las citas registradas en el período seleccionado.</p></header>
     {success ? <p className="admin-success rounded-xl p-4 text-sm" role="status">{success}</p> : null}
+    {state.kind === 'ready' && (agendaQuery.isFetching || pendingQuery.isFetching) ? <p className="admin-muted text-sm" role="status">Actualizando citas…</p> : null}
+    {state.kind === 'ready' && agendaQuery.isError ? <p className="text-sm text-red-700" role="alert">{errorMessage(agendaQuery.error)} <button className="dashboard-retry" onClick={() => { void load() }} type="button">Reintentar</button></p> : null}
     <section aria-label="Filtros de citas médicas" className="admin-surface flex flex-wrap items-end gap-4 rounded-[20px] p-5 sm:p-6">
       <label className="min-w-44 flex-1 text-sm font-medium text-ink-950">Mes<input className={inputClass} onChange={(event) => { if (!event.target.value) return; const [year, value] = event.target.value.split('-').map(Number); setMonth({ year, value }) }} type="month" value={`${month.year}-${String(month.value).padStart(2, '0')}`}/></label>
       <label className="min-w-44 flex-1 text-sm font-medium text-ink-950">Estado<select className={inputClass} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} value={statusFilter}><option value="todos">Todos los estados</option>{(Object.keys(statusLabels) as Array<keyof typeof statusLabels>).map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}</select></label>
@@ -178,6 +179,7 @@ export function MedicalAppointmentsPage() {
         </li>)}</ul>}
       </section>
       {state.pending.length > 0 ? <section aria-labelledby="pending-requests-title" className="admin-surface rounded-[20px] p-5 sm:p-6"><h2 className="text-xl font-semibold text-ink-950" id="pending-requests-title">Solicitudes pendientes</h2><ul className="mt-4 grid gap-3 md:grid-cols-2">{state.pending.map((entry) => <li className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#dbe6f2] p-4" key={entry.id}><div><p className="font-semibold text-ink-950">{entry.paciente?.nombres ?? 'Paciente no disponible'}</p>{entry.paciente?.codigo_paciente ? <p className="admin-muted text-sm">Código: {entry.paciente.codigo_paciente}</p> : null}</div><button className="admin-primary min-h-11 rounded-lg px-4 text-sm font-semibold" onClick={(event) => openDialog({ kind: 'program', entry }, event.currentTarget)} type="button">Programar</button></li>)}</ul></section> : null}
+      {pendingQuery.isError ? <ErrorState description={errorMessage(pendingQuery.error)} onRetry={() => { void pendingQuery.refetch() }}/>: null}
     </>}
     {dialog ? <AccessibleDialog busy={busy} onClose={closeDialog} title={dialog.kind === 'clinical' ? clinicalActionLabel(dialog.entry) : dialogTitles[dialog.kind]} titleId="appointment-dialog-title">{dialog.kind === 'clinical' ? <ClinicalDataForm busy={busy} entry={dialog.entry} error={actionError} key={dialog.entry.id} onCancel={closeDialog} onSave={saveClinical}/> : <AppointmentDialogForm busy={busy} dialog={dialog} error={actionError} key={`${dialog.kind}-${dialog.entry.id}`} onCancel={closeDialog} onSave={save}/>}</AccessibleDialog> : null}
   </div>

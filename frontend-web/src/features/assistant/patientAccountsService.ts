@@ -14,12 +14,13 @@ function requireApiBaseUrl() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getPatientAccounts(buscar = ''): Promise<Account[]> {
+export async function getPatientAccounts(buscar = '', signal?: AbortSignal): Promise<Account[]> {
   requireApiBaseUrl()
   const accounts: Account[] = []
   let pageNumber = 1
   while (true) {
-    const { data } = await apiClient.get<unknown>('/usuarios', { params: { ...(buscar.trim() ? { buscar: buscar.trim() } : {}), page: pageNumber } })
+    signal?.throwIfAborted()
+    const { data } = await apiClient.get<unknown>('/usuarios', { params: { ...(buscar.trim() ? { buscar: buscar.trim() } : {}), page: pageNumber }, signal })
     const page = paginatedSchema(accountSchema).parse(data)
     if (page.current_page !== pageNumber) throw new Error('La paginación de usuarios no coincide con la página solicitada.')
     accounts.push(...page.data.filter((account) => account.role === 'paciente'))

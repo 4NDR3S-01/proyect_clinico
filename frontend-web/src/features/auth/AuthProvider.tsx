@@ -1,6 +1,8 @@
 import { isAxiosError } from 'axios'
 import { useEffect, useState, type ReactNode } from 'react'
 import { AUTH_UNAUTHORIZED_EVENT } from '../../services/apiClient'
+import { beginClinicalSession, clearClinicalQueries } from '../../services/clinicalQuery'
+import { clearClinicalViewState } from '../../services/clinicalViewState'
 import { getCurrentUser, login as requestLogin, logout as requestLogout } from './authService'
 import { clearAccessToken, getAccessToken, setAccessToken } from './authStorage'
 import { AuthContext, type AuthStatus } from './authContext'
@@ -19,11 +21,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void getCurrentUser().then((currentUser) => {
       if (!active || getAccessToken() !== token) return
+      beginClinicalSession(currentUser)
+      clearClinicalViewState()
       setUser(currentUser)
       setStatus('authenticated')
     }).catch((error: unknown) => {
       if (!active || getAccessToken() !== token) return
       clearAccessToken()
+      clearClinicalQueries()
+      clearClinicalViewState()
       setUser(null)
       setStatus('guest')
       if (!isAxiosError(error) || error.response?.status !== 401) {
@@ -37,6 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onUnauthorized = () => {
       clearAccessToken()
+      clearClinicalQueries()
+      clearClinicalViewState()
       setUser(null)
       setStatus('guest')
       setSessionError('Tu sesión expiró. Inicia sesión nuevamente.')
@@ -51,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const acceptSession = (response: { access_token: string; user: AuthUser }) => {
+    beginClinicalSession(response.user)
+    clearClinicalViewState()
     setAccessToken(response.access_token)
     setUser(response.user)
     setSessionError(null)
@@ -64,6 +74,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Local sign-out also applies when the server is unavailable.
     } finally {
       clearAccessToken()
+      clearClinicalQueries()
+      clearClinicalViewState()
       setUser(null)
       setSessionError(null)
       setStatus('guest')

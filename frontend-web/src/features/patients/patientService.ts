@@ -31,9 +31,9 @@ function requireApiBaseUrl(): void {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getPatients(params: { buscar?: string; page?: number } = {}): Promise<PatientPage> {
+export async function getPatients(params: { buscar?: string; page?: number } = {}, signal?: AbortSignal): Promise<PatientPage> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/pacientes', { params })
+  const { data } = await apiClient.get<unknown>('/pacientes', { params, ...(signal ? { signal } : {}) })
   return patientPageSchema.parse(data)
 }
 

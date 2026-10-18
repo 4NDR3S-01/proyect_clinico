@@ -19,7 +19,7 @@ async function renderOctober() {
 describe('MedicalAppointmentsPage', () => {
   it('loads the confirmed month and shows only received medical appointments', async () => {
     await renderOctober()
-    expect(getAgendaMonth).toHaveBeenCalledWith(10, 2026)
+    expect(getAgendaMonth).toHaveBeenCalledWith(10, 2026, expect.any(AbortSignal))
     expect(screen.getByText('Citas encontradas: 1')).toBeInTheDocument()
     const appointments = screen.getByRole('region', { name: 'Citas registradas' })
     expect(within(appointments).getByText('Paciente recibido')).toBeInTheDocument()
@@ -62,7 +62,7 @@ describe('MedicalAppointmentsPage', () => {
   it('loads another month through the existing monthly endpoint', async () => {
     await renderOctober()
     fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '2026-11' } })
-    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(11, 2026))
+    await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(11, 2026, expect.any(AbortSignal)))
   })
 
   it('programs a real pending request with a selected date and refetches both views', async () => {

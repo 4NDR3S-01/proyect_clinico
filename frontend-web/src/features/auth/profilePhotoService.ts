@@ -6,9 +6,9 @@ function configured() {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getProfilePhoto(userId: string): Promise<Blob> {
+export async function getProfilePhoto(userId: string, signal?: AbortSignal): Promise<Blob> {
   configured()
-  const { data } = await apiClient.get<Blob>(`/usuarios/${encodeURIComponent(userId)}/foto`, { responseType: 'blob' })
+  const { data } = await apiClient.get<Blob>(`/usuarios/${encodeURIComponent(userId)}/foto`, { responseType: 'blob', ...(signal ? { signal } : {}) })
   return data
 }
 

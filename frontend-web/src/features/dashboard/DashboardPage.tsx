@@ -1,26 +1,22 @@
 import { isAxiosError } from 'axios'
 import { ArrowRight, CalendarDays, ClipboardList, FileClock, MoreHorizontal, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useClinicalQuery } from '../../services/clinicalQuery'
 import { formatCurrency, formatDate } from '../../utils/displayFormat'
-import { getActivities, type Activity } from '../activities/activityService'
+import { getActivities } from '../activities/activityService'
 import { getAgendaMonth, getPendingRequests, type AgendaEntry } from '../agenda/agendaService'
 import { useAuth } from '../auth/authContext'
 import { canAccessArea } from '../auth/roleAccess'
-import { getPatients, type PatientPage } from '../patients/patientService'
-import { getDashboardReport, type DashboardReport } from '../reports/reportService'
+import { getPatients } from '../patients/patientService'
+import { getDashboardReport } from '../reports/reportService'
 
-type DataState<T> = { kind: 'loading' } | { kind: 'ready'; data: T } | { kind: 'error'; message: string }
-type DashboardResults = {
-  agenda: AgendaEntry[]
-  pending: AgendaEntry[]
-  patients: PatientPage
-  report: DashboardReport
-  activities: Activity[]
+type DataState<T> = { kind: 'loading' } | { kind: 'ready'; data: T; refreshError?: string } | { kind: 'error'; message: string }
+function toState<T>(query: { data: T | undefined; isError: boolean; error: Error | null }): DataState<T> {
+  if (query.data !== undefined) return { kind: 'ready', data: query.data, ...(query.isError ? { refreshError: errorMessage(query.error) } : {}) }
+  if (query.isError) return { kind: 'error', message: errorMessage(query.error) }
+  return { kind: 'loading' }
 }
-type DashboardData = { [K in keyof DashboardResults]: DataState<DashboardResults[K]> }
-
-const loading = { kind: 'loading' } as const
 const statusLabels: Record<NonNullable<AgendaEntry['estado']>, string> = {
   pendiente: 'Pendiente', programada: 'Programada', cancelada: 'Cancelada', completada: 'Completada',
 }
@@ -55,13 +51,14 @@ function MetricCard({ icon: Icon, tone, tag, label, detail, state, value, to, ch
   return <section aria-label={label} className="dashboard-metric admin-surface min-w-0 rounded-2xl p-4">
     <Link aria-label={`Abrir ${label}`} className="dashboard-metric-link" to={to}/>
     <div className="flex items-start justify-between gap-2"><span aria-hidden="true" className={`dashboard-metric-icon dashboard-tone-${tone}`}><Icon size={19} strokeWidth={1.9}/></span><span className={`dashboard-metric-tag dashboard-tone-${tone}`}>{tag}</span></div>
-    {state.kind === 'loading' ? <p className="dashboard-metric-value" role="status">Cargando…</p> : state.kind === 'error' ? <div className="mt-4"><p className="text-sm text-red-700" role="alert">{state.message}</p><button className="dashboard-retry" onClick={onRetry} type="button">Reintentar</button></div> : <><p className="dashboard-metric-value">{value}</p><p className="dashboard-metric-label">{label}</p>{detail ? <p className="dashboard-metric-detail">{detail}</p> : null}{children}</>}
+    {state.kind === 'loading' ? <p className="dashboard-metric-value" role="status">Cargando…</p> : state.kind === 'error' ? <div className="mt-4"><p className="text-sm text-red-700" role="alert">{state.message}</p><button className="dashboard-retry" onClick={onRetry} type="button">Reintentar</button></div> : <><p className="dashboard-metric-value">{value}</p><p className="dashboard-metric-label">{label}</p>{detail ? <p className="dashboard-metric-detail">{detail}</p> : null}{children}{state.refreshError ? <p className="mt-2 text-xs text-red-700" role="alert">No fue posible actualizar. <button className="dashboard-retry" onClick={onRetry} type="button">Reintentar</button></p> : null}</>}
   </section>
 }
 
 function PanelState({ state, empty, onRetry }: { state: DataState<unknown>; empty: string; onRetry: () => void }) {
   if (state.kind === 'loading') return <p className="dashboard-panel-message" role="status">Cargando información…</p>
   if (state.kind === 'error') return <div className="dashboard-panel-message"><p className="text-red-700" role="alert">{state.message}</p><button className="dashboard-retry" onClick={onRetry} type="button">Reintentar</button></div>
+  if (state.refreshError) return <div className="dashboard-panel-message"><p className="text-red-700" role="alert">No fue posible actualizar esta información.</p><button className="dashboard-retry" onClick={onRetry} type="button">Reintentar</button></div>
   return <p className="dashboard-panel-message">{empty}</p>
 }
 
@@ -80,28 +77,14 @@ export function DashboardPage() {
   const canViewActivities = canAccessArea(user?.role, 'actividades')
   const canViewCash = canAccessArea(user?.role, 'caja')
   const [today] = useState(() => new Date())
-  const [retry, setRetry] = useState(0)
-  const [data, setData] = useState<DashboardData>({ agenda: loading, pending: loading, patients: loading, report: loading, activities: loading })
-  const retryLoad = () => setRetry((value) => value + 1)
-
-  useEffect(() => {
-    let active = true
-    const load = <K extends keyof DashboardResults>(key: K, request: () => Promise<DashboardResults[K]>) => {
-      setData((current) => ({ ...current, [key]: loading }))
-      void Promise.resolve().then(request).then(
-        (result) => { if (active) setData((current) => ({ ...current, [key]: { kind: 'ready', data: result } })) },
-        (error: unknown) => { if (active) setData((current) => ({ ...current, [key]: { kind: 'error', message: errorMessage(error) } })) },
-      )
-    }
-    if (canViewAgenda) {
-      load('agenda', () => getAgendaMonth(today.getMonth() + 1, today.getFullYear()))
-      load('pending', getPendingRequests)
-    }
-    if (canViewPatients && !canViewCash) load('patients', () => getPatients())
-    if (canViewCash) load('report', getDashboardReport)
-    if (canViewActivities) load('activities', () => getActivities({ mes: today.getMonth() + 1, anio: today.getFullYear() }))
-    return () => { active = false }
-  }, [canViewAgenda, canViewPatients, canViewCash, canViewActivities, retry, today])
+  const month = today.getMonth() + 1
+  const year = today.getFullYear()
+  const agendaQuery = useClinicalQuery(['agenda', month, year], (signal) => getAgendaMonth(month, year, signal), { enabled: canViewAgenda })
+  const pendingQuery = useClinicalQuery(['agenda', 'pending'], getPendingRequests, { enabled: canViewAgenda })
+  const patientsQuery = useClinicalQuery(['patients', '', 1], (signal) => getPatients({}, signal), { enabled: canViewPatients && !canViewCash })
+  const reportQuery = useClinicalQuery(['dashboard-report'], getDashboardReport, { enabled: canViewCash })
+  const activitiesQuery = useClinicalQuery(['activities', { mes: month, anio: year }], (signal) => getActivities({ mes: month, anio: year }, signal), { enabled: canViewActivities })
+  const data = { agenda: toState(agendaQuery), pending: toState(pendingQuery), patients: toState(patientsQuery), report: toState(reportQuery), activities: toState(activitiesQuery) }
 
   const appointments = data.agenda.kind === 'ready'
     ? data.agenda.data.filter((entry) => entry.tipo === 'cita_medica' && entry.fecha?.slice(0, 10) === todayKey(today)).sort((a, b) => (a.hora_inicio ?? '').localeCompare(b.hora_inicio ?? ''))
@@ -122,21 +105,21 @@ export function DashboardPage() {
     <div className="dashboard-intro"><p className="dashboard-eyebrow">Panel clínico</p><h1>Resumen de gestión</h1><p>Consulta la actividad del consultorio y las tareas pendientes.</p></div>
 
     <div className="dashboard-metrics">
-      {canViewAgenda ? <MetricCard detail="Citas programadas para hoy" icon={CalendarDays} label="Citas médicas" onRetry={retryLoad} state={data.report} tag="Hoy" to="/citas-medicas" tone="blue" value={data.report.kind === 'ready' ? String(data.report.data.citas.hoy) : ''}/> : null}
-      {canViewPatients ? <MetricCard detail="Pacientes registrados en el sistema" icon={UsersRound} label="Pacientes registrados" onRetry={retryLoad} state={canViewCash ? data.report : data.patients} tag="Total" to="/pacientes" tone="cyan" value={canViewCash ? data.report.kind === 'ready' ? String(data.report.data.pacientes.total) : '' : data.patients.kind === 'ready' ? String(data.patients.data.total) : ''}/> : null}
-      {canViewCash ? <MetricCard detail="" icon={Wallet} label="Ingresos y egresos" onRetry={retryLoad} state={data.report} tag="Este mes" to="/caja" tone="green" value={data.report.kind === 'ready' ? formatCurrency(data.report.data.mes_actual.saldo) : ''}>{data.report.kind === 'ready' ? <p className="dashboard-metric-detail dashboard-money-line">Ingresos: {formatCurrency(data.report.data.mes_actual.ingresos)} <span aria-hidden="true">|</span> Egresos: {formatCurrency(data.report.data.mes_actual.egresos)}</p> : null}</MetricCard> : null}
-      {canViewActivities ? <MetricCard detail="Actividades registradas en el mes actual" icon={ClipboardList} label="Actividades" onRetry={retryLoad} state={data.activities} tag="Este mes" to="/actividades" tone="violet" value={data.activities.kind === 'ready' ? String(data.activities.data.length) : ''}/> : null}
+      {canViewAgenda ? <MetricCard detail="Citas programadas para hoy" icon={CalendarDays} label="Citas médicas" onRetry={() => { void (canViewCash ? reportQuery : agendaQuery).refetch() }} state={canViewCash ? data.report : data.agenda} tag="Hoy" to="/citas-medicas" tone="blue" value={canViewCash ? data.report.kind === 'ready' ? String(data.report.data.citas.hoy) : '' : data.agenda.kind === 'ready' ? String(appointments.length) : ''}/> : null}
+      {canViewPatients ? <MetricCard detail="Pacientes registrados en el sistema" icon={UsersRound} label="Pacientes registrados" onRetry={() => { void (canViewCash ? reportQuery : patientsQuery).refetch() }} state={canViewCash ? data.report : data.patients} tag="Total" to="/pacientes" tone="cyan" value={canViewCash ? data.report.kind === 'ready' ? String(data.report.data.pacientes.total) : '' : data.patients.kind === 'ready' ? String(data.patients.data.total) : ''}/> : null}
+      {canViewCash ? <MetricCard detail="" icon={Wallet} label="Ingresos y egresos" onRetry={() => { void reportQuery.refetch() }} state={data.report} tag="Este mes" to="/caja" tone="green" value={data.report.kind === 'ready' ? formatCurrency(data.report.data.mes_actual.saldo) : ''}>{data.report.kind === 'ready' ? <p className="dashboard-metric-detail dashboard-money-line">Ingresos: {formatCurrency(data.report.data.mes_actual.ingresos)} <span aria-hidden="true">|</span> Egresos: {formatCurrency(data.report.data.mes_actual.egresos)}</p> : null}</MetricCard> : null}
+      {canViewActivities ? <MetricCard detail="Actividades registradas en el mes actual" icon={ClipboardList} label="Actividades" onRetry={() => { void activitiesQuery.refetch() }} state={data.activities} tag="Este mes" to="/actividades" tone="violet" value={data.activities.kind === 'ready' ? String(data.activities.data.length) : ''}/> : null}
     </div>
 
     <div className={`dashboard-content ${canViewAgenda ? '' : 'dashboard-content-single'}`}>
       {canViewAgenda ? <section aria-labelledby="dashboard-agenda-title" className="dashboard-panel dashboard-agenda admin-surface">
         <div className="dashboard-panel-head"><div><h2 id="dashboard-agenda-title">Agenda de hoy</h2><p>{formatDate(todayKey(today))}</p></div><Link className="dashboard-panel-link" to="/agenda">Ver agenda completa <ArrowRight aria-hidden="true" size={14}/></Link></div>
-        {data.agenda.kind === 'ready' && appointments.length ? <div className="dashboard-agenda-list"><div aria-hidden="true" className="dashboard-agenda-labels"><span>Paciente</span><span>Hora</span><span>Motivo / descripción</span><span>Estado</span><span>Acción</span></div><ul>{appointments.map((entry) => <li className="dashboard-agenda-row" key={entry.id}><div className="dashboard-agenda-patient"><span aria-hidden="true" className="dashboard-patient-avatar">{patientInitials(entry.paciente?.nombres)}</span><span className="min-w-0"><strong>{entry.paciente?.nombres ?? 'Paciente no disponible'}</strong>{entry.paciente?.codigo_paciente ? <small>{entry.paciente.codigo_paciente}</small> : null}</span></div><time>{entry.hora_inicio?.slice(0, 5) ?? 'Sin hora'}</time><p className="dashboard-agenda-description">{entry.descripcion ?? 'Sin descripción'}</p><span>{entry.estado ? <span className={`admin-pill ${statusClasses[entry.estado]}`}>{statusLabels[entry.estado]}</span> : 'Sin estado'}</span><Link aria-label={`Ver cita de ${entry.paciente?.nombres ?? 'paciente no disponible'}`} className="dashboard-row-action" to="/citas-medicas"><MoreHorizontal aria-hidden="true" size={17}/></Link></li>)}</ul></div> : <PanelState empty="No hay citas médicas registradas para hoy." onRetry={retryLoad} state={data.agenda}/>}
+        {data.agenda.kind === 'ready' && appointments.length ? <div className="dashboard-agenda-list"><div aria-hidden="true" className="dashboard-agenda-labels"><span>Paciente</span><span>Hora</span><span>Motivo / descripción</span><span>Estado</span><span>Acción</span></div><ul>{appointments.map((entry) => <li className="dashboard-agenda-row" key={entry.id}><div className="dashboard-agenda-patient"><span aria-hidden="true" className="dashboard-patient-avatar">{patientInitials(entry.paciente?.nombres)}</span><span className="min-w-0"><strong>{entry.paciente?.nombres ?? 'Paciente no disponible'}</strong>{entry.paciente?.codigo_paciente ? <small>{entry.paciente.codigo_paciente}</small> : null}</span></div><time>{entry.hora_inicio?.slice(0, 5) ?? 'Sin hora'}</time><p className="dashboard-agenda-description">{entry.descripcion ?? 'Sin descripción'}</p><span>{entry.estado ? <span className={`admin-pill ${statusClasses[entry.estado]}`}>{statusLabels[entry.estado]}</span> : 'Sin estado'}</span><Link aria-label={`Ver cita de ${entry.paciente?.nombres ?? 'paciente no disponible'}`} className="dashboard-row-action" to="/citas-medicas"><MoreHorizontal aria-hidden="true" size={17}/></Link></li>)}</ul></div> : <PanelState empty="No hay citas médicas registradas para hoy." onRetry={() => { void agendaQuery.refetch() }} state={data.agenda}/>}
       </section> : null}
 
       <div className="dashboard-side">
         <section aria-labelledby="dashboard-quick-title" className="dashboard-panel dashboard-quick admin-surface"><div className="dashboard-panel-head"><h2 id="dashboard-quick-title">Accesos rápidos</h2></div><div className="dashboard-quick-grid">{quickLinks.map(({ to, label, detail, icon: Icon, tone }) => <Link className="dashboard-quick-link" key={label} to={to}><span aria-hidden="true" className={`dashboard-quick-icon dashboard-tone-${tone}`}><Icon size={18} strokeWidth={1.8}/></span><strong>{label}</strong><small>{detail}</small></Link>)}</div></section>
-        {canViewAgenda ? <section aria-labelledby="dashboard-pending-title" className="dashboard-panel dashboard-requests admin-surface"><div className="dashboard-panel-head"><h2 id="dashboard-pending-title">Solicitudes pendientes</h2><Link className="dashboard-panel-link" to="/citas-medicas">Ver citas médicas <ArrowRight aria-hidden="true" size={14}/></Link></div>{data.pending.kind === 'ready' && pendingRequests.length ? <ul className="dashboard-request-list">{pendingRequests.map((entry) => <li key={entry.id}><span className="dashboard-request-name">{entry.paciente?.nombres ?? 'Paciente no disponible'}</span>{entry.paciente?.codigo_paciente ? <small>{entry.paciente.codigo_paciente}</small> : null}<span className="admin-pill admin-pill-pending">Pendiente</span></li>)}</ul> : <PanelState empty="No hay solicitudes de citas pendientes." onRetry={retryLoad} state={data.pending}/>}</section> : null}
+        {canViewAgenda ? <section aria-labelledby="dashboard-pending-title" className="dashboard-panel dashboard-requests admin-surface"><div className="dashboard-panel-head"><h2 id="dashboard-pending-title">Solicitudes pendientes</h2><Link className="dashboard-panel-link" to="/citas-medicas">Ver citas médicas <ArrowRight aria-hidden="true" size={14}/></Link></div>{data.pending.kind === 'ready' && pendingRequests.length ? <ul className="dashboard-request-list">{pendingRequests.map((entry) => <li key={entry.id}><span className="dashboard-request-name">{entry.paciente?.nombres ?? 'Paciente no disponible'}</span>{entry.paciente?.codigo_paciente ? <small>{entry.paciente.codigo_paciente}</small> : null}<span className="admin-pill admin-pill-pending">Pendiente</span></li>)}</ul> : <PanelState empty="No hay solicitudes de citas pendientes." onRetry={() => { void pendingQuery.refetch() }} state={data.pending}/>}</section> : null}
       </div>
     </div>
   </div>

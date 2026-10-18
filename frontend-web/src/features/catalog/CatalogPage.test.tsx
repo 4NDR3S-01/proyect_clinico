@@ -10,6 +10,14 @@ const service = { id: 'service-id', categoria_id: category.id, nombre: 'Servicio
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getCategories).mockResolvedValue([category]); vi.mocked(getServices).mockResolvedValue([service]) })
 
 describe('CatalogPage', () => {
+  it('keeps received services visible if the independent categories request fails', async () => {
+    vi.mocked(getCategories).mockRejectedValue(new Error('network'))
+    render(<MemoryRouter><CatalogPage/></MemoryRouter>)
+    expect(await screen.findByText(service.nombre)).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('No fue posible completar la operación.')
+    expect(screen.queryByRole('region', { name: 'Categorías' })).not.toBeInTheDocument()
+  })
+
   it('lists backend categories and services without offering broken category deletion', async () => {
     render(<MemoryRouter><CatalogPage/></MemoryRouter>)
     const categories = await screen.findByRole('region', { name: 'Categorías' })
