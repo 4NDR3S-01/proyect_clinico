@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgendaPage } from './AgendaPage'
 import { createMedicalAppointment, createPersonalEntry, getAgendaMonth, getPendingRequests, updateAgendaEntry } from './agendaService'
 import { AuthContext } from '../auth/authContext'
+import { getPatients } from '../patients/patientService'
 import type { UserRole } from '../auth/authService'
 
 vi.mock('./agendaService', () => ({ getAgendaMonth: vi.fn(), getPendingRequests: vi.fn(), createMedicalAppointment: vi.fn(), createPersonalEntry: vi.fn(), updateAgendaEntry: vi.fn() }))
+vi.mock('../patients/patientService', () => ({ getPatients: vi.fn() }))
 const personal = { id: 'personal-1', paciente_id: null, fecha: '2026-10-05', hora_inicio: '10:00', hora_fin: '11:00', tipo: 'personal' as const, descripcion: 'Reunión', estado: null, diagnostico: null, tratamiento: null, observacion: null, paciente: null }
 const medical = { ...personal, id: 'medical-1', tipo: 'cita_medica' as const, estado: 'programada' as const, descripcion: 'Control recibido', paciente_id: 'patient-1', paciente: { codigo_paciente: '001', nombres: 'Paciente recibido' } }
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(getAgendaMonth).mockResolvedValue([personal, medical]) })
+beforeEach(() => { vi.resetAllMocks(); vi.mocked(getAgendaMonth).mockResolvedValue([personal, medical]); vi.mocked(getPatients).mockResolvedValue({ data: [{ id: 'patient-1', codigo_paciente: '001', nombres: 'Paciente recibido', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: null }], current_page: 1, last_page: 1, per_page: 20, total: 1, next_page_url: null, prev_page_url: null }) })
 
 function renderAgenda(role: UserRole = 'doctora') {
   render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'staff-1', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><AgendaPage/></AuthContext.Provider>)
@@ -18,13 +20,129 @@ function selectOctober() {
   fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '2026-10' } })
 }
 
+async function choosePatient(form: HTMLElement, search = 'Paciente') {
+  fireEvent.change(within(form).getByRole('combobox', { name: 'Buscar paciente' }), { target: { value: search } })
+  fireEvent.click(await within(form).findByRole('option', { name: /Paciente recibido.*001/ }))
+}
+
 describe('AgendaPage consultation', () => {
-  it('shows only real records for the selected day and does not mix in personal entry controls', async () => {
+  it('creates a personal entry without patient data and refreshes the calendar', async () => {
+    vi.mocked(createPersonalEntry).mockResolvedValue('Actividad personal registrada.')
+    renderAgenda()
+    selectOctober()
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Actividad personal' }))
+    const form = screen.getByRole('form', { name: 'Agendar actividad personal' })
+    expect(within(form).queryByRole('combobox', { name: 'Buscar paciente' })).not.toBeInTheDocument()
+    fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
+    fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
+    fireEvent.submit(form)
+    expect(await within(form).findByRole('alert')).toHaveTextContent('La descripción es obligatoria')
+    fireEvent.change(within(form).getByLabelText('Descripción'), { target: { value: 'Reunión de trabajo' } })
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() => expect(createPersonalEntry).toHaveBeenCalledExactlyOnceWith({ fecha: '2026-10-05', hora_inicio: '09:00', hora_fin: '10:00', descripcion: 'Reunión de trabajo' }))
+    expect(createMedicalAppointment).not.toHaveBeenCalled()
+    expect(await screen.findByText('Actividad personal registrada correctamente.')).toBeInTheDocument()
+  })
+
+  it('selects a searched patient and sends only its code for a medical appointment', async () => {
+    vi.mocked(createMedicalAppointment).mockResolvedValue('Cita registrada')
+    renderAgenda()
+    selectOctober()
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+    const form = screen.getByRole('form', { name: 'Agendar cita médica' })
+    fireEvent.change(within(form).getByRole('combobox', { name: 'Buscar paciente' }), { target: { value: 'Paciente' } })
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: 'Paciente', page: 1 }, expect.any(AbortSignal)))
+    fireEvent.click(await within(form).findByRole('option', { name: /Paciente recibido.*001/ }))
+    expect(within(form).getByRole('status')).toHaveTextContent('Paciente seleccionado: Paciente recibido · Código: 001')
+    fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
+    fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
+    fireEvent.submit(form)
+    await waitFor(() => expect(createMedicalAppointment).toHaveBeenCalledExactlyOnceWith({ codigo_paciente: '001', fecha: '2026-10-05', hora_inicio: '09:00', hora_fin: '10:00', descripcion: null }))
+  })
+
+  it('finds by code with Enter and invalidates the selection when the text changes', async () => {
+    renderAgenda()
+    selectOctober()
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+    const form = screen.getByRole('form', { name: 'Agendar cita médica' })
+    const search = within(form).getByRole('combobox', { name: 'Buscar paciente' })
+    fireEvent.change(search, { target: { value: '001' } })
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: '001', page: 1 }, expect.any(AbortSignal)))
+    await within(form).findByRole('option', { name: /Paciente recibido.*001/ })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(within(form).getByRole('status')).toHaveTextContent('Paciente seleccionado: Paciente recibido · Código: 001')
+    fireEvent.change(search, { target: { value: 'Otro paciente' } })
+    expect(within(form).queryByText(/Paciente seleccionado:/)).not.toBeInTheDocument()
+    fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
+    fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
+    fireEvent.submit(form)
+    expect(await within(form).findByRole('alert')).toHaveTextContent('Selecciona un paciente')
+    expect(createMedicalAppointment).not.toHaveBeenCalled()
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(search).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('dialog', { name: 'Agendar cita médica' })).toBeInTheDocument()
+  })
+
+  it('abandons obsolete patient searches and does not show their results', async () => {
+    const signals: AbortSignal[] = []
+    let finishOld!: (value: Awaited<ReturnType<typeof getPatients>>) => void
+    vi.mocked(getPatients).mockImplementation((params, signal) => {
+      signals.push(signal!)
+      if (params?.buscar === 'viejo') return new Promise((resolve) => { finishOld = resolve })
+      return Promise.resolve({ data: [], current_page: 1, last_page: 1, per_page: 20, total: 0, next_page_url: null, prev_page_url: null })
+    })
+    renderAgenda()
+    selectOctober()
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+    const search = screen.getByRole('combobox', { name: 'Buscar paciente' })
+    fireEvent.change(search, { target: { value: 'viejo' } })
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: 'viejo', page: 1 }, expect.any(AbortSignal)))
+    fireEvent.change(search, { target: { value: 'nuevo' } })
+    await waitFor(() => expect(getPatients).toHaveBeenCalledWith({ buscar: 'nuevo', page: 1 }, expect.any(AbortSignal)))
+    expect(signals[0].aborted).toBe(true)
+    finishOld({ data: [{ id: 'old', codigo_paciente: '099', nombres: 'Resultado viejo', cedula: '0912345678', telefono: null, direccion: null, fecha_nacimiento: null }], current_page: 1, last_page: 1, per_page: 20, total: 1, next_page_url: null, prev_page_url: null })
+    expect(await screen.findByText('Sin coincidencias. Prueba otro nombre o código.')).toBeInTheDocument()
+    expect(screen.queryByText('Resultado viejo')).not.toBeInTheDocument()
+  })
+
+  it('retries a failed search and selects the right patient among similar names', async () => {
+    vi.mocked(getPatients).mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({
+      data: [
+        { id: 'one', codigo_paciente: '001', nombres: 'María Uno', cedula: '0911111111', telefono: null, direccion: null, fecha_nacimiento: null },
+        { id: 'two', codigo_paciente: '002', nombres: 'María Dos', cedula: '0922222222', telefono: null, direccion: null, fecha_nacimiento: null },
+      ], current_page: 1, last_page: 2, per_page: 20, total: 21, next_page_url: '/pacientes?page=2', prev_page_url: null,
+    })
+    vi.mocked(createMedicalAppointment).mockResolvedValue('Cita registrada')
+    renderAgenda()
+    selectOctober()
+    fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+    const form = screen.getByRole('form', { name: 'Agendar cita médica' })
+    const search = within(form).getByRole('combobox', { name: 'Buscar paciente' })
+    expect(getPatients).not.toHaveBeenCalled()
+    fireEvent.change(search, { target: { value: 'María' } })
+    expect(await within(form).findByRole('alert')).toHaveTextContent('No fue posible buscar pacientes')
+    fireEvent.click(within(form).getByRole('button', { name: 'Reintentar' }))
+    expect(await within(form).findByRole('option', { name: /María Dos.*002/ })).toBeInTheDocument()
+    expect(within(form).getByText(/Se muestra la primera página/)).toBeInTheDocument()
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(within(form).getByRole('status')).toHaveTextContent('María Dos · Código: 002')
+    fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
+    fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
+    fireEvent.submit(form)
+    await waitFor(() => expect(createMedicalAppointment).toHaveBeenCalledWith(expect.objectContaining({ codigo_paciente: '002' })))
+  })
+  it('shows only real records for the selected day before opening creation', async () => {
     renderAgenda()
     selectOctober()
     await waitFor(() => expect(getAgendaMonth).toHaveBeenCalledWith(10, 2026, expect.any(AbortSignal)))
-    expect(screen.queryByRole('button', { name: 'Cita médica' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Actividad personal' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
     const day = screen.getByRole('region', { name: '5 de octubre de 2026' })
     expect(day).toHaveTextContent('5 de octubre de 2026')
@@ -34,7 +152,7 @@ describe('AgendaPage consultation', () => {
     expect(day).toHaveTextContent('Paciente recibido')
     expect(day).toHaveTextContent('10:00–11:00')
     expect(day).toHaveTextContent('Estado: programada')
-    expect(within(day).getByRole('button', { name: 'Agendar cita' })).toBeInTheDocument()
+    expect(within(day).getByRole('button', { name: 'Agendar' })).toBeInTheDocument()
     expect(getPendingRequests).not.toHaveBeenCalled()
     expect(createMedicalAppointment).not.toHaveBeenCalled()
     expect(createPersonalEntry).not.toHaveBeenCalled()
@@ -69,10 +187,10 @@ describe('AgendaPage consultation', () => {
     renderAgenda()
     selectOctober()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Agendar cita' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
     const form = screen.getByRole('form', { name: 'Agendar cita médica' })
     expect(form).toHaveTextContent('5 de octubre de 2026')
-    fireEvent.change(within(form).getByLabelText('Código de paciente'), { target: { value: '001' } })
+    await choosePatient(form)
     fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
     fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
     fireEvent.submit(form)
@@ -87,7 +205,7 @@ describe('AgendaPage consultation', () => {
     selectOctober()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
     expect(await within(screen.getByRole('region', { name: '5 de octubre de 2026' })).findByText('2 registros')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Agendar cita' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Agendar' })).not.toBeInTheDocument()
   })
 
   it.each([[409, 'Horario ocupado.'], [422, 'El código de paciente no existe.']] as const)('shows backend %s and keeps the appointment form open', async (status, message) => {
@@ -95,9 +213,9 @@ describe('AgendaPage consultation', () => {
     renderAgenda()
     selectOctober()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Agendar cita' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
     const form = screen.getByRole('form', { name: 'Agendar cita médica' })
-    fireEvent.change(within(form).getByLabelText('Código de paciente'), { target: { value: '001' } })
+    await choosePatient(form)
     fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
     fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
     fireEvent.submit(form)
@@ -111,15 +229,15 @@ describe('AgendaPage consultation', () => {
     renderAgenda()
     selectOctober()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Agendar cita' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
     const form = screen.getByRole('form', { name: 'Agendar cita médica' })
-    fireEvent.change(within(form).getByLabelText('Código de paciente'), { target: { value: 'NO-EXISTE' } })
+    await choosePatient(form)
     fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
     fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
     fireEvent.submit(form)
-    expect(await within(form).findByRole('alert')).toHaveTextContent('No fue posible confirmar si la cita se registró')
+    expect(await within(form).findByRole('alert')).toHaveTextContent('No fue posible confirmar si el registro se guardó')
     expect(screen.queryByText('Cita médica registrada correctamente.')).not.toBeInTheDocument()
-    expect(createMedicalAppointment).toHaveBeenCalledExactlyOnceWith({ codigo_paciente: 'NO-EXISTE', fecha: '2026-10-05', hora_inicio: '09:00', hora_fin: '10:00', descripcion: null })
+    expect(createMedicalAppointment).toHaveBeenCalledExactlyOnceWith({ codigo_paciente: '001', fecha: '2026-10-05', hora_inicio: '09:00', hora_fin: '10:00', descripcion: null })
   })
 
   it('reports a confirmed booking when the calendar reload fails', async () => {
@@ -128,13 +246,13 @@ describe('AgendaPage consultation', () => {
     renderAgenda()
     selectOctober()
     fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Agendar cita' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
     const form = screen.getByRole('form', { name: 'Agendar cita médica' })
-    fireEvent.change(within(form).getByLabelText('Código de paciente'), { target: { value: '001' } })
+    await choosePatient(form)
     fireEvent.change(within(form).getByLabelText('Hora de inicio'), { target: { value: '09:00' } })
     fireEvent.change(within(form).getByLabelText('Hora de fin'), { target: { value: '10:00' } })
     fireEvent.submit(form)
-    expect(await screen.findByRole('status')).toHaveTextContent('La cita se registró, pero no fue posible actualizar el calendario')
+    expect(await screen.findByText(/La cita se registró, pero no fue posible actualizar el calendario/)).toBeInTheDocument()
     expect(createMedicalAppointment).toHaveBeenCalledOnce()
   })
 })

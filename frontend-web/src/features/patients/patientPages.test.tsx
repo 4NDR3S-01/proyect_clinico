@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PatientsPage } from './PatientsPage'
 import { PatientWorkspace } from './PatientWorkspace'
@@ -18,8 +18,13 @@ const httpError = (status: number, message: string) => ({ isAxiosError: true, re
 
 beforeEach(() => vi.resetAllMocks())
 
+function LocationDisplay() {
+  const location = useLocation()
+  return <span data-testid="location">{location.pathname}{location.search}</span>
+}
+
 function renderDetail(path = '/pacientes/patient-id/historial', role: UserRole = 'doctora') {
-  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><MemoryRouter initialEntries={[path]}><Routes><Route element={<PatientWorkspace/>} path="/pacientes/:patientId"><Route element={<Navigate replace to="historial"/>} index/><Route element={<Navigate replace to="../historial"/>} path="resumen"/><Route element={<ClinicalHistorySection/>} path="historial"/><Route element={<PatientDiagnosisSection/>} path="diagnosticos"/><Route element={<Navigate replace to="../diagnosticos?apartado=tratamientos"/>} path="tratamientos"/><Route element={<Navigate replace to="../diagnosticos?apartado=odontograma"/>} path="odontograma"/></Route></Routes></MemoryRouter></AuthContext.Provider>)
+  render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><MemoryRouter initialEntries={[path]}><LocationDisplay/><Routes><Route element={<PatientWorkspace/>} path="/pacientes/:patientId"><Route element={<Navigate replace to="historial"/>} index/><Route element={<Navigate replace to="../historial"/>} path="resumen"/><Route element={<ClinicalHistorySection/>} path="historial"/><Route element={<PatientDiagnosisSection/>} path="diagnosticos"/><Route element={<Navigate replace to="../diagnosticos?apartado=tratamientos"/>} path="tratamientos"/><Route element={<Navigate replace to="../diagnosticos?apartado=odontograma"/>} path="odontograma"/></Route></Routes></MemoryRouter></AuthContext.Provider>)
 }
 
 describe('patient views', () => {
@@ -237,11 +242,21 @@ describe('patient views', () => {
     renderDetail('/pacientes/patient-id/tratamientos')
     expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tratamientos' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Diagnóstico', 'Odontograma', 'Tratamientos'])
+    expect(within(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Odontograma', 'Diagnóstico', 'Tratamientos'])
     fireEvent.click(screen.getByRole('button', { name: 'Odontograma' }))
     expect(screen.getByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos')
     expect(screen.getByRole('status')).toHaveTextContent('estructura clínica')
     expect(within(screen.getByRole('navigation', { name: 'Secciones del expediente' })).getAllByRole('link')).toHaveLength(3)
+  })
+
+  it('opens Odontograma first when Diagnósticos has no explicit apartado', async () => {
+    vi.mocked(getPatient).mockResolvedValue(patient)
+    renderDetail('/pacientes/patient-id/diagnosticos')
+    expect(await screen.findByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos')
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnóstico' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos?apartado=diagnostico')
   })
 
   it('redirects the old Resumen route into Historial clínico', async () => {
@@ -260,6 +275,7 @@ describe('patient views', () => {
     expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Integración pendiente')
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnóstico' }))
     const action = screen.queryByRole('link', { name: 'Ir a Citas médicas' })
     if (canOpenAppointments) expect(action).toHaveAttribute('href', '/citas-medicas')
     else expect(action).not.toBeInTheDocument()

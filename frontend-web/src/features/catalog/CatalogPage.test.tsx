@@ -68,5 +68,7 @@ describe('CatalogPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar eliminación' }))
     await waitFor(() => expect(deleteService).toHaveBeenCalledExactlyOnceWith(service.id))
     expect(await screen.findByText('Sin servicios')).toBeInTheDocument()
+    expect(getCategories).toHaveBeenCalledTimes(1)
+    expect(getServices).toHaveBeenCalledTimes(2)
   })
 })
