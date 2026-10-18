@@ -219,9 +219,8 @@ class AuditoriaTransaccionesTest extends TestCase
             $target->createToken('existente');
 
             return match ($method) {
-                'cambiarPasswordAsistente' => fn () => $service->$method('password-nuevo', $actor),
-                'desactivarUsuario', 'activarUsuario', 'desvincularPaciente' => fn () => $service->$method($target->id, $actor),
-                default => fn () => $service->$method($actor),
+                'cambiarPasswordAsistente' => fn () => $service->$method($target->id, 'password-nuevo', $actor),
+                default => fn () => $service->$method($target->id, $actor),
             };
         }
 

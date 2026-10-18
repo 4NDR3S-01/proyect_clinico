@@ -97,6 +97,9 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('DB_SEARCH_PATH', 'public,private,finanzas,clinical'),
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+            // Segundos máximos para conectar y para cada consulta (ver AppServiceProvider).
+            'connect_timeout' => (int) env('DB_CONNECT_TIMEOUT', 3),
+            'statement_timeout' => (int) env('DB_STATEMENT_TIMEOUT', 15),
         ],
 
         'sqlsrv' => [

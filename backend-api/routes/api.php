@@ -36,7 +36,12 @@ use App\Http\Controllers\Api\Configuracion\AuditoriaController;
 use App\Http\Controllers\Api\Servicio\CategoriaServicioController;
 use App\Http\Controllers\Api\Servicio\ServicioConsultorioController;
 
+use App\Http\Controllers\Api\Sistema\SaludController;
 
+
+
+// Estado de la instancia (usado por el balanceador y las pruebas de fallo)
+Route::get('/health', SaludController::class);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
