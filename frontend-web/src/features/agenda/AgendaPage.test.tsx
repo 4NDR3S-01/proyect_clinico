@@ -139,6 +139,40 @@ describe('AgendaPage consultation', () => {
     fireEvent.submit(form)
     await waitFor(() => expect(createMedicalAppointment).toHaveBeenCalledWith(expect.objectContaining({ codigo_paciente: '002' })))
   })
+
+  it('keeps a long result list scrollable and scrolls the keyboard-active option into view', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView })
+    try {
+      vi.mocked(getPatients).mockResolvedValueOnce({
+        data: Array.from({ length: 20 }, (_, index) => ({ id: `patient-${index}`, codigo_paciente: `P${index}`, nombres: `Paciente ${index}`, cedula: `09000000${String(index).padStart(2, '0')}`, telefono: null, direccion: null, fecha_nacimiento: null })),
+        current_page: 1, last_page: 1, per_page: 20, total: 20, next_page_url: null, prev_page_url: null,
+      })
+      renderAgenda()
+      selectOctober()
+      fireEvent.click(screen.getByRole('button', { name: /Seleccionar 5 de octubre/ }))
+      fireEvent.click(await screen.findByRole('button', { name: 'Agendar' }))
+      const search = screen.getByRole('combobox', { name: 'Buscar paciente' })
+      fireEvent.change(search, { target: { value: 'Paciente' } })
+      const list = await screen.findByRole('listbox')
+      expect(await within(list).findAllByRole('option')).toHaveLength(20)
+      expect(list).toHaveClass('max-h-56', 'overflow-y-auto', 'overflow-x-hidden')
+      for (let index = 0; index < 12; index += 1) fireEvent.keyDown(search, { key: 'ArrowDown' })
+      const activeOption = within(list).getByRole('option', { name: /Paciente 12.*P12/ })
+      expect(activeOption).toHaveAttribute('aria-selected', 'true')
+      expect(search).toHaveAttribute('aria-activedescendant', activeOption.id)
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+      expect(scrollIntoView.mock.contexts.at(-1)).toBe(activeOption)
+      fireEvent.keyDown(search, { key: 'ArrowUp' })
+      expect(within(list).getByRole('option', { name: /Paciente 11.*P11/ })).toHaveAttribute('aria-selected', 'true')
+      fireEvent.keyDown(search, { key: 'Escape' })
+      expect(search).toHaveAttribute('aria-expanded', 'false')
+    } finally {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', descriptor)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+    }
+  })
   it('shows only real records for the selected day before opening creation', async () => {
     renderAgenda()
     selectOctober()

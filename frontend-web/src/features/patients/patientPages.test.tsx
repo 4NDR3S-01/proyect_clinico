@@ -240,9 +240,9 @@ describe('patient views', () => {
   it('keeps Tratamientos and Odontograma inside Diagnósticos, including legacy links', async () => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail('/pacientes/patient-id/tratamientos')
-    expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Evaluación clínica' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Tratamientos' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Odontograma', 'Diagnóstico', 'Tratamientos'])
+    expect(within(screen.getByRole('group', { name: 'Apartados de evaluación clínica' })).getAllByRole('button').map((button) => button.textContent)).toEqual(['Odontograma', 'Diagnóstico', 'Tratamientos'])
     fireEvent.click(screen.getByRole('button', { name: 'Odontograma' }))
     expect(screen.getByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos')
@@ -253,7 +253,8 @@ describe('patient views', () => {
   it('opens Odontograma first when Diagnósticos has no explicit apartado', async () => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail('/pacientes/patient-id/diagnosticos')
-    expect(await screen.findByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('heading', { name: 'Evaluación clínica' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Odontograma' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos')
     fireEvent.click(screen.getByRole('button', { name: 'Diagnóstico' }))
     expect(screen.getByTestId('location')).toHaveTextContent('/pacientes/patient-id/diagnosticos?apartado=diagnostico')
@@ -272,8 +273,8 @@ describe('patient views', () => {
   ] as const)('keeps %s %s pending and only offers the authorized Citas médicas route', async (role, path, canOpenAppointments) => {
     vi.mocked(getPatient).mockResolvedValue(patient)
     renderDetail(`/pacientes/patient-id/${path}`, role)
-    expect(await screen.findByRole('heading', { name: 'Diagnósticos' })).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Apartados de diagnósticos' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Evaluación clínica' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Apartados de evaluación clínica' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Integración pendiente')
     fireEvent.click(screen.getByRole('button', { name: 'Diagnóstico' }))
     const action = screen.queryByRole('link', { name: 'Ir a Citas médicas' })
