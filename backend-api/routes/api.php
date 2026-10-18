@@ -409,6 +409,9 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('configuracion')->grou
 
     Route::get('/sesiones', [AuditoriaController::class, 'sesiones']);
 
+    // Historial de cambios con valor anterior y nuevo (trazabilidad)
+    Route::get('/cambios', [AuditoriaController::class, 'cambios']);
+
 });
 
 

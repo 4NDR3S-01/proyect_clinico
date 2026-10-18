@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Middleware\ContextoAuditoria;
 use App\Http\Middleware\IdentificarInstancia;
 use App\Http\Middleware\RoleMiddleware;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,6 +25,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Los proxies de confianza se leen de config/trustedproxy.php (TRUSTED_PROXIES).
         $middleware->prepend(IdentificarInstancia::class);
+
+        // Trazabilidad en PostgreSQL: necesita al usuario ya autenticado.
+        $middleware->appendToGroup('api', ContextoAuditoria::class);
+        $middleware->appendToPriorityList(Authenticate::class, ContextoAuditoria::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Respuestas controladas cuando cae un servicio externo, en lugar de un 500 genérico.
