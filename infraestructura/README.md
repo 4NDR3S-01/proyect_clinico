@@ -57,10 +57,10 @@ El archivo debe ser **idéntico en las cinco laptops**. Para cambiar de modo se 
 2. **Laptop 5 · Archivos:** seguir `servidor_ftp/README.md` (rama `servidor-ftp`).
 3. **Laptop 3 · Backend**
    ```bash
-   cp backend-api/.env.example backend-api/.env   # completar DB_PASSWORD, FTP_PASSWORD, TRUSTED_PROXIES
+   cp backend-api/.env.example backend-api/.env   # completar DB_PASSWORD, FTP_PASSWORD, TRUSTED_PROXIES, DOCTORA_PASSWORD
    sudo laptop3-backend/instalar.sh
    ```
-   Instala PHP, copia el código a `/opt/clinica/backend-api`, ejecuta las migraciones y levanta `clinica-backend@1` y `clinica-backend@2`.
+   Instala PHP, copia el código a `/opt/clinica/backend-api`, ejecuta las migraciones, crea la cuenta de la doctora y levanta `clinica-backend@1` y `clinica-backend@2`.
 4. **Laptop 2 · Web** (requiere Node.js 20+)
    ```bash
    sudo laptop2-web/instalar.sh

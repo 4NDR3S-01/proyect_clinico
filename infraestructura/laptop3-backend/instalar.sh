@@ -42,6 +42,10 @@ chmod 640 .env && chown root:www-data .env
 # Sin config:cache: BACKEND_INSTANCE se lee del entorno de cada instancia.
 sudo -u www-data php artisan config:clear
 sudo -u www-data php artisan migrate --force
+# Cuenta inicial de la doctora (idempotente), si DOCTORA_PASSWORD está en .env.
+if grep -qE '^DOCTORA_PASSWORD=.{8,}' .env; then
+    sudo -u www-data php artisan db:seed --force
+fi
 
 mkdir -p /etc/clinica /var/log/clinica
 chown www-data:www-data /var/log/clinica
