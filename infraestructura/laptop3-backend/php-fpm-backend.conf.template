@@ -1,0 +1,39 @@
+; ==============================================================================
+; Laptop 3 - Instancia ${INSTANCIA} del backend (PHP-FPM independiente).
+; Cada instancia es un proceso propio: detener una no afecta a la otra.
+; ==============================================================================
+[global]
+pid = /run/clinica/${INSTANCIA}.pid
+error_log = /var/log/clinica/${INSTANCIA}-fpm.log
+log_level = notice
+
+[${INSTANCIA}]
+user = www-data
+group = www-data
+
+; Escucha en la red solo para el balanceador (Laptop 1).
+listen = 0.0.0.0:${PUERTO}
+listen.allowed_clients = ${BALANCEADOR_IP}
+
+pm = dynamic
+pm.max_children = 10
+pm.start_servers = 2
+pm.min_spare_servers = 1
+pm.max_spare_servers = 4
+pm.max_requests = 500
+
+; Una petición colgada no bloquea la instancia para siempre.
+request_terminate_timeout = 60s
+request_slowlog_timeout = 10s
+slowlog = /var/log/clinica/${INSTANCIA}-slow.log
+
+; Nombre de la instancia que Laravel devuelve en X-Backend-Instance y en los logs.
+env[BACKEND_INSTANCE] = ${INSTANCIA}
+env[PATH] = /usr/local/bin:/usr/bin:/bin
+
+catch_workers_output = yes
+decorate_workers_output = no
+php_admin_value[error_log] = /var/log/clinica/${INSTANCIA}-php.log
+php_admin_flag[log_errors] = on
+php_admin_value[upload_max_filesize] = 20M
+php_admin_value[post_max_size] = 22M
