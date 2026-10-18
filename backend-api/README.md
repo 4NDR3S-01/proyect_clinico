@@ -7,6 +7,19 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Esquemas PostgreSQL
+
+La conexión PostgreSQL usa `DB_SEARCH_PATH=public,private` por defecto para acceder
+a las tablas existentes de ambos esquemas. Se espera que `users`, `pacientes`,
+`password_reset_tokens` y `personal_access_tokens` estén en `private`, y las demás
+en `public`. El nombre de la tabla de usuarios sigue siendo `users`.
+
+El usuario de conexión necesita acceso a ambos esquemas y a sus tablas.
+Si existen tablas con el mismo nombre en ambos esquemas, `public` tiene prioridad.
+Esta configuración no mueve tablas: las migraciones que crean tablas sin indicar
+esquema siguen creándolas en `public`. Está destinada a la base ya reorganizada.
+Después de cambiar la configuración en un despliegue, ejecuta `php artisan config:clear`.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

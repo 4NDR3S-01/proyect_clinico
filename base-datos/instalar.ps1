@@ -1,0 +1,105 @@
+<#
+  Laptop 4 (Windows): prepara PostgreSQL para el sistema.
+  - Crea el usuario de la aplicación (clinica_app) y la base BD_NOMBRE de red.env.
+  - Solo acepta conexiones del backend (y opcionalmente de un equipo de administración).
+  Las tablas NO se crean aquí: las crean las migraciones de Laravel en la Laptop 3.
+
+  Requisito: PostgreSQL instalado con el instalador oficial.
+  Uso (PowerShell como administrador, desde la carpeta base-datos):
+      .\instalar.ps1
+      .\instalar.ps1 -AdminIP 100.102.99.114     # permite además mantenimiento desde ese equipo
+#>
+param(
+    [string] $PgBin,
+    [string] $SuperUsuario = 'postgres',
+    [string] $AppUsuario = 'clinica_app',
+    [string] $AdminIP,
+    [string] $Servidor = '127.0.0.1'
+)
+
+. "$PSScriptRoot\..\infraestructura\comun.ps1"
+Assert-Administrador
+$red = Import-Red
+$base = $red.BD_NOMBRE
+
+# 1. Ubicar psql.exe (la versión más reciente instalada).
+if (-not $PgBin) {
+    $psql = Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' -ErrorAction SilentlyContinue |
+        Sort-Object { [version]($_.Directory.Parent.Name -replace '[^\d.]', '') } | Select-Object -Last 1
+    if (-not $psql) { throw 'No se encontró PostgreSQL. Indica la carpeta bin con -PgBin.' }
+    $PgBin = $psql.DirectoryName
+}
+$psqlExe = Join-Path $PgBin ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core' ? 'psql.exe' : 'psql')
+
+# 2. Contraseñas (no se guardan en ningún archivo).
+if (-not $env:PGPASSWORD) {
+    $env:PGPASSWORD = [Net.NetworkCredential]::new('', (Read-Host "Contraseña del superusuario $SuperUsuario" -AsSecureString)).Password
+}
+$clave = if ($env:CLINICA_APP_PASSWORD) { $env:CLINICA_APP_PASSWORD } else {
+    [Net.NetworkCredential]::new('', (Read-Host "Contraseña nueva para $AppUsuario (DB_PASSWORD del backend)" -AsSecureString)).Password
+}
+if ($clave.Length -lt 10) { throw 'Usa una contraseña de al menos 10 caracteres para la aplicación.' }
+
+function Invoke-Psql([string] $Sql, [string] $Conectar = 'postgres') {
+    $salida = $Sql | & $psqlExe -X -q -t -A -v ON_ERROR_STOP=1 -h $Servidor -p $red.BD_PORT -U $SuperUsuario -d $Conectar `
+        -v "usuario=$AppUsuario" -v "clave=$clave" -v "base=$base" 2>&1
+    if ($LASTEXITCODE) { throw "psql falló: $salida" }
+    return $salida
+}
+
+# 3. Usuario y base de datos (se puede ejecutar varias veces).
+Invoke-Psql @'
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'usuario', :'clave')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'usuario') \gexec
+SELECT format('ALTER ROLE %I PASSWORD %L', :'usuario', :'clave') \gexec
+SELECT format('CREATE DATABASE %I OWNER %I ENCODING ''UTF8''', :'base', :'usuario')
+WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'base') \gexec
+SELECT format('ALTER DATABASE %I OWNER TO %I', :'base', :'usuario') \gexec
+SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'base') \gexec
+'@ | Out-Null
+# En PostgreSQL 15+ el esquema public no es de libre escritura: pasa a ser de la aplicación.
+Invoke-Psql "SELECT format('ALTER SCHEMA public OWNER TO %I', :'usuario') \gexec" $base | Out-Null
+Write-Host "Base '$base' lista, propiedad de $AppUsuario."
+
+# 4. Escuchar en la red y aceptar solo al backend (y al administrador si se indicó).
+$configFile = (Invoke-Psql 'SHOW config_file').Trim()
+$hbaFile = (Invoke-Psql 'SHOW hba_file').Trim()
+
+function Set-Bloque([string] $Archivo, [string[]] $Lineas) {
+    # Bloque entre marcas: al repetir la instalación se reemplaza, no se duplica.
+    $texto = (Get-Content $Archivo -Raw -Encoding UTF8) -replace '(?s)\r?\n# clinica-inicio.*?# clinica-fin\r?\n?', ''
+    $bloque = @('', '# clinica-inicio (generado por base-datos\instalar.ps1)') + $Lineas + '# clinica-fin'
+    [IO.File]::WriteAllText($Archivo, $texto.TrimEnd() + ($bloque -join [Environment]::NewLine) + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    Write-Host "Actualizado $Archivo"
+}
+
+Set-Bloque $configFile @(
+    "listen_addresses = '*'",
+    "port = $($red.BD_PORT)",
+    "password_encryption = scram-sha-256",
+    "log_connections = on",
+    "log_disconnections = on",
+    "log_min_duration_statement = 1000"
+)
+
+$autorizados = @($red.BACKEND_IP) + @($AdminIP | Where-Object { $_ })
+$reglas = foreach ($ip in $autorizados) {
+    "host    $base    $AppUsuario    $ip/32    scram-sha-256"
+}
+if ($AdminIP) { $reglas += "host    all    $SuperUsuario    $AdminIP/32    scram-sha-256" }
+Set-Bloque $hbaFile $reglas
+
+# 5. Reiniciar PostgreSQL y abrir el puerto solo para esos equipos.
+$servicio = if ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core') {
+    Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+if ($servicio) {
+    Restart-Service $servicio.Name -Force
+    Write-Host "Servicio $($servicio.Name) reiniciado."
+} else {
+    Write-Warning 'No se encontró el servicio de PostgreSQL: reinícialo manualmente para aplicar los cambios.'
+}
+Add-ReglaFirewall 'Clinica PostgreSQL' $red.BD_PORT $autorizados
+
+Write-Host "`nPostgreSQL listo en $($red.BD_IP):$($red.BD_PORT), solo para $($autorizados -join ', ')." -ForegroundColor Green
+Write-Host "En backend-api\.env: DB_HOST=$($red.BD_IP)  DB_DATABASE=$base  DB_USERNAME=$AppUsuario  DB_PASSWORD=(la que escribiste)"

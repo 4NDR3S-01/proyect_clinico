@@ -16,6 +16,12 @@ class RegisterPacienteRequest extends FormRequest
         return [
             'nombres' => ['required', 'string', 'max:255'],
             'cedula' => ['required', 'string', 'max:20'],
+            'email' => [
+                'required',
+                'email',
+                'max:255',
+                'unique:users,email',
+            ],
             'telefono' => ['required', 'string', 'max:20'],
             'direccion' => ['required', 'string', 'max:255'],
             'fecha_nacimiento' => [
@@ -37,6 +43,9 @@ class RegisterPacienteRequest extends FormRequest
         return [
             'nombres.required' => 'Los nombres son obligatorios.',
             'cedula.required' => 'La cédula es obligatoria.',
+            'email.required' => 'El correo electrónico es obligatorio.',
+            'email.email' => 'El correo electrónico no es válido.',
+            'email.unique' => 'El correo electrónico ya está en uso.',
             'telefono.required' => 'El teléfono es obligatorio.',
             'direccion.required' => 'La dirección es obligatoria.',
             'fecha_nacimiento.required' => 'La fecha de nacimiento es obligatoria.',
