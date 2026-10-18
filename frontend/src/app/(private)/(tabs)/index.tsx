@@ -28,6 +28,22 @@ const actions = [
     href: "/(private)/(tabs)/history",
   },
   {
+    title: "Mis recetas",
+    detail: "Medicamentos e indicaciones",
+    icon: "pill" as const,
+    color: palette.primary,
+    background: palette.primarySoft,
+    href: "/(private)/(tabs)/prescriptions",
+  },
+  {
+    title: "Mis archivos",
+    detail: "Consulta y sube radiografías",
+    icon: "file-image-outline" as const,
+    color: palette.navy,
+    background: "#EDF2F7",
+    href: "/(private)/(tabs)/documents",
+  },
+  {
     title: "Servicios",
     detail: "Conoce el catálogo de la clínica",
     icon: "tooth-outline" as const,

@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useCallback, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   AppHeader,
   Button,
@@ -13,8 +13,12 @@ import {
 } from "@/components/ui/patient-ui";
 import { palette, space, type as typography } from "@/constants/theme";
 import {
+  canChangeAppointment,
+  cancelAppointment,
   getAppointments,
   requestAppointment,
+  rescheduleAppointment,
+  type Appointment,
 } from "@/features/patient/appointments";
 import { useRemote } from "@/hooks/use-remote";
 export default function Appointments() {
@@ -23,6 +27,55 @@ export default function Appointments() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [submitError, setSubmitError] = useState("");
+  const [changing, setChanging] = useState<string | null>(null);
+  const change = async (
+    item: Appointment,
+    action: (id: string) => Promise<string>,
+  ) => {
+    if (changing) return;
+    setChanging(item.id);
+    setMessage("");
+    setSubmitError("");
+    try {
+      setMessage(await action(item.id));
+      await reload();
+    } catch (reason) {
+      setSubmitError(
+        reason instanceof Error
+          ? reason.message
+          : "No se pudo actualizar la cita.",
+      );
+    } finally {
+      setChanging(null);
+    }
+  };
+  const confirmCancel = (item: Appointment) =>
+    Alert.alert(
+      "Cancelar cita",
+      item.date
+        ? `¿Deseas cancelar tu cita del ${item.date}?`
+        : "¿Deseas cancelar tu solicitud de cita?",
+      [
+        { text: "Volver", style: "cancel" },
+        {
+          text: "Cancelar cita",
+          style: "destructive",
+          onPress: () => void change(item, cancelAppointment),
+        },
+      ],
+    );
+  const confirmReschedule = (item: Appointment) =>
+    Alert.alert(
+      "Reprogramar cita",
+      "Se liberará el horario actual y el consultorio te asignará una nueva fecha.",
+      [
+        { text: "Volver", style: "cancel" },
+        {
+          text: "Reprogramar",
+          onPress: () => void change(item, (id) => rescheduleAppointment(id)),
+        },
+      ],
+    );
   const request = async () => {
     setBusy(true);
     setMessage("");
@@ -95,6 +148,32 @@ export default function Appointments() {
               {item.description ? (
                 <Text style={styles.description}>{item.description}</Text>
               ) : null}
+              {canChangeAppointment(item) ? (
+                <View style={styles.actions}>
+                  {item.status === "programada" ? (
+                    <Button
+                      title="Reprogramar"
+                      icon="calendar-sync"
+                      variant="secondary"
+                      loading={changing === item.id}
+                      disabled={changing !== null}
+                      onPress={() => confirmReschedule(item)}
+                    />
+                  ) : null}
+                  <Button
+                    title={
+                      item.status === "pendiente"
+                        ? "Cancelar solicitud"
+                        : "Cancelar cita"
+                    }
+                    icon="calendar-remove"
+                    variant="danger"
+                    loading={changing === item.id}
+                    disabled={changing !== null}
+                    onPress={() => confirmCancel(item)}
+                  />
+                </View>
+              ) : null}
             </Card>
           ))}
         </View>
@@ -135,4 +214,5 @@ const styles = StyleSheet.create({
   meta: { flexDirection: "row", alignItems: "center", gap: space.xs },
   metaText: { color: palette.textMuted, ...typography.body },
   description: { color: palette.textMuted, ...typography.body },
+  actions: { gap: space.sm },
 });

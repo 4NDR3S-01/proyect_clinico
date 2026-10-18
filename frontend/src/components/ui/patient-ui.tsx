@@ -411,17 +411,28 @@ export function InfoRow({
 }
 export function StatusBadge({ status }: { status: string }) {
   const pending = status.toLowerCase().includes("pendiente");
+  const cancelled = status.toLowerCase().includes("cancelada");
   return (
     <View
       style={[
         styles.badge,
-        pending ? styles.badgeWarning : styles.badgeSuccess,
+        cancelled
+          ? styles.badgeDanger
+          : pending
+            ? styles.badgeWarning
+            : styles.badgeSuccess,
       ]}
     >
       <Text
         style={[
           styles.badgeText,
-          pending ? { color: palette.warning } : { color: palette.success },
+          {
+            color: cancelled
+              ? palette.danger
+              : pending
+                ? palette.warning
+                : palette.success,
+          },
         ]}
       >
         {status}
@@ -675,6 +686,7 @@ const styles = StyleSheet.create({
   },
   badgeWarning: { backgroundColor: palette.warningSoft },
   badgeSuccess: { backgroundColor: palette.successSoft },
+  badgeDanger: { backgroundColor: palette.dangerSoft },
   badgeText: { textTransform: "capitalize", ...typography.caption },
   chip: {
     minHeight: 40,

@@ -83,10 +83,14 @@ export default function Services() {
                     color={palette.textMuted}
                   />
                   <Text style={styles.metaText}>
-                    {item.durationMinutes} min
+                    {item.durationMinutes !== null
+                      ? `${item.durationMinutes} min`
+                      : "Duración por confirmar"}
                   </Text>
                 </View>
-                <Text style={styles.price}>${item.price}</Text>
+                <Text style={styles.price}>
+                  {item.price !== null ? `$${item.price}` : "Consultar"}
+                </Text>
               </View>
             </Card>
           ))}
