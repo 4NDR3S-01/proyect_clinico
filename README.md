@@ -32,7 +32,7 @@ Proyecto integrador IS-803 (ULEAM 2026-2). Es un sistema distribuido en cinco la
 | [`backend-api/`](backend-api/despliegue/README.md) | Laptop 3 · Backend ×2 | jordyalex32 | 100.92.238.94 | Windows |
 | [`base-datos/`](base-datos/README.md) | Laptop 4 · PostgreSQL | Luis-M25 | 100.104.9.95 | Windows |
 | [`servidor_ftp/`](servidor_ftp/README.md) | Laptop 5 · Archivos | andriwgamesyt | 100.127.65.82 | Windows |
-| [`frontend/`](frontend/README.md) | App móvil (cliente) | andriw4452R | — | Expo |
+| [`frontend/`](frontend/README.md) | App móvil (cliente) | Jeremy | — | Expo |
 | [`infraestructura/`](infraestructura/README.md) | Compartido | todos | — | — |
 
 `infraestructura/` contiene lo que comparten todos los nodos:

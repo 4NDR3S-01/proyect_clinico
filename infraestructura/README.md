@@ -31,7 +31,7 @@ Esta guía explica cómo cada integrante levanta su servicio desde su casa y có
 | 3 · Backend | Jordy | `backend` | 100.92.238.94 | `backend-api/despliegue/` |
 | 4 · Base de datos | Luis | `database` | 100.104.9.95 | `base-datos/` |
 | 5 · Archivos FTP | Andriw | `servidor-ftp` | 100.127.65.82 | `servidor_ftp/` |
-| App móvil | Andriw | (celular) | — | `frontend/` |
+| App móvil | Jeremy | (celular) | — | `frontend/` |
 
 ---
 
