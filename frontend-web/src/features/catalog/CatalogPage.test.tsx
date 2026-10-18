@@ -10,6 +10,18 @@ const service = { id: 'service-id', categoria_id: category.id, nombre: 'Servicio
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getCategories).mockResolvedValue([category]); vi.mocked(getServices).mockResolvedValue([service]) })
 
 describe('CatalogPage', () => {
+  it('keeps all fetched services reachable while limiting the initial DOM', async () => {
+    vi.mocked(getServices).mockResolvedValue(Array.from({ length: 120 }, (_, index) => ({ ...service, id: `service-${index}`, nombre: `Servicio ${index}` })))
+    render(<MemoryRouter><CatalogPage/></MemoryRouter>)
+    expect(await screen.findByText('Servicio 0')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 50 de 120 registros recibidos')).toBeInTheDocument()
+    expect(screen.queryByText('Servicio 119')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    expect(screen.getByText('Servicio 119')).toBeInTheDocument()
+    expect(getServices).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps received services visible if the independent categories request fails', async () => {
     vi.mocked(getCategories).mockRejectedValue(new Error('network'))
     render(<MemoryRouter><CatalogPage/></MemoryRouter>)

@@ -11,6 +11,18 @@ beforeEach(() => { vi.resetAllMocks(); vi.mocked(getActivities).mockResolvedValu
 function renderPage(role: UserRole) { render(<AuthContext.Provider value={{ status: 'authenticated', user: { id: 'user-id', name: 'Personal', username: 'personal', role, paciente_id: null, activo: true }, sessionError: null, login: async () => {}, logout: async () => {} }}><ActivitiesPage/></AuthContext.Provider>) }
 
 describe('ActivitiesPage', () => {
+  it('keeps a large server result accessible without mounting every row at once', async () => {
+    vi.mocked(getActivities).mockResolvedValue(Array.from({ length: 120 }, (_, index) => ({ ...record, id: `activity-${index}`, actividad: `Actividad ${index}` })))
+    renderPage('asistente')
+    expect(await screen.findByText('Actividad 0')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 50 de 120 registros recibidos')).toBeInTheDocument()
+    expect(screen.queryByText('Actividad 119')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    expect(screen.getByText('Actividad 119')).toBeInTheDocument()
+    expect(getActivities).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps received activities visible when only the period total fails', async () => {
     vi.mocked(getActivityTotal).mockRejectedValue(new Error('network'))
     renderPage('doctora')

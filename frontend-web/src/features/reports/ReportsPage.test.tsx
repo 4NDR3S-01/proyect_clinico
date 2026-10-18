@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReportsPage } from './ReportsPage'
 import { getClinicalReport, getEconomicReport, getFinancialReport, getIncomeReport } from './reportService'
 
@@ -12,8 +12,25 @@ beforeEach(() => {
   vi.mocked(getFinancialReport).mockImplementation(async (anio) => ({ anio, meses: Array.from({ length: 12 }, (_, index) => ({ mes: index + 1, ...balance })) }))
   vi.mocked(getIncomeReport).mockResolvedValue({ total_ingresos: '125.00', por_actividad: [] })
 })
+afterEach(() => vi.unstubAllGlobals())
 
 describe('ReportsPage', () => {
+  it('defers the expensive annual query until its panel approaches the viewport', async () => {
+    let reveal!: () => void
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { reveal = () => callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver) }
+      observe() {}
+      disconnect() {}
+    })
+    render(<ReportsPage/>)
+    await waitFor(() => expect(getClinicalReport).toHaveBeenCalledTimes(1))
+    expect(getEconomicReport).toHaveBeenCalledTimes(1)
+    expect(getIncomeReport).toHaveBeenCalledTimes(1)
+    expect(getFinancialReport).not.toHaveBeenCalled()
+    act(() => reveal())
+    await waitFor(() => expect(getFinancialReport).toHaveBeenCalledTimes(1))
+  })
+
   it('shows only validated backend metrics and all twelve returned months', async () => {
     render(<ReportsPage/>)
     const clinical = screen.getByRole('region', { name: 'Reporte clínico' })

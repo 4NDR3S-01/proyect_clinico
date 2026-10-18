@@ -16,16 +16,36 @@ function requireApiBaseUrl() {
 
 export async function getPatientAccounts(buscar = '', signal?: AbortSignal): Promise<Account[]> {
   requireApiBaseUrl()
-  const accounts: Account[] = []
-  let pageNumber = 1
-  while (true) {
-    signal?.throwIfAborted()
-    const { data } = await apiClient.get<unknown>('/usuarios', { params: { ...(buscar.trim() ? { buscar: buscar.trim() } : {}), page: pageNumber }, signal })
+  const controller = new AbortController()
+  const onAbort = () => controller.abort()
+  signal?.addEventListener('abort', onAbort, { once: true })
+  if (signal?.aborted) controller.abort()
+  const readPage = async (pageNumber: number) => {
+    controller.signal.throwIfAborted()
+    const { data } = await apiClient.get<unknown>('/usuarios', { params: { ...(buscar.trim() ? { buscar: buscar.trim() } : {}), page: pageNumber }, signal: controller.signal })
     const page = paginatedSchema(accountSchema).parse(data)
     if (page.current_page !== pageNumber) throw new Error('La paginación de usuarios no coincide con la página solicitada.')
-    accounts.push(...page.data.filter((account) => account.role === 'paciente'))
-    if (pageNumber >= page.last_page) return accounts
-    pageNumber++
+    return page
+  }
+  try {
+    const first = await readPage(1)
+    const pages: Account[][] = [first.data.filter((account) => account.role === 'paciente')]
+    let nextPage = 2
+    const workers = Array.from({ length: Math.min(3, first.last_page - 1) }, async () => {
+      while (nextPage <= first.last_page) {
+        const pageNumber = nextPage++
+        try {
+          const page = await readPage(pageNumber)
+          if (page.last_page !== first.last_page) throw new Error('La paginación de usuarios cambió durante la consulta. Vuelve a intentarlo.')
+          pages[pageNumber - 1] = page.data.filter((account) => account.role === 'paciente')
+        } catch (error) { controller.abort(); throw error }
+      }
+    })
+    await Promise.all(workers)
+    controller.signal.throwIfAborted()
+    return pages.flat()
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
 }
 

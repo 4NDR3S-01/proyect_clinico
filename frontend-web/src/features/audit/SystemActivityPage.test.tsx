@@ -10,6 +10,18 @@ const session = { id: 'session-1', user_id: 'doctor-1', usuario: 'Doctora', rol:
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getRecordedActions).mockResolvedValue([action]); vi.mocked(getRecordedSessions).mockResolvedValue([session]) })
 
 describe('SystemActivityPage', () => {
+  it('bounds the DOM for complete audit responses without dropping records', async () => {
+    vi.mocked(getRecordedActions).mockResolvedValue(Array.from({ length: 120 }, (_, index) => ({ ...action, id: `action-${index}`, accion: `acción ${index}` })))
+    render(<MemoryRouter><SystemActivityPage/></MemoryRouter>)
+    expect(await screen.findByText('agenda · acción 0')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 50 de 120 registros recibidos')).toBeInTheDocument()
+    expect(screen.queryByText('agenda · acción 119')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    expect(screen.getByText('agenda · acción 119')).toBeInTheDocument()
+    expect(getRecordedActions).toHaveBeenCalledTimes(1)
+  })
+
   it('loads actions, switches to sessions and filters by date', async () => {
     render(<MemoryRouter><SystemActivityPage/></MemoryRouter>)
     expect(await screen.findByText('agenda · crear')).toBeInTheDocument()

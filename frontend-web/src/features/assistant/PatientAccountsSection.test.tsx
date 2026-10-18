@@ -11,6 +11,18 @@ const unlinked = { ...linked, paciente_id: null, activo: false }
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getPatientAccounts).mockResolvedValue([linked]) })
 
 describe('PatientAccountsSection', () => {
+  it('renders a bounded first batch after the complete account scan', async () => {
+    vi.mocked(getPatientAccounts).mockResolvedValue(Array.from({ length: 120 }, (_, index) => ({ ...linked, id: `account-${index}`, name: `Cuenta ${index}` })))
+    render(<PatientAccountsSection/>)
+    expect(await screen.findByText('Cuenta 0')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 50 de 120 registros recibidos')).toBeInTheDocument()
+    expect(screen.queryByText('Cuenta 119')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    expect(screen.getByText('Cuenta 119')).toBeInTheDocument()
+    expect(getPatientAccounts).toHaveBeenCalledTimes(1)
+  })
+
   it('loads patient accounts and distinguishes linked and inactive accounts', async () => {
     render(<PatientAccountsSection/>)
     expect(screen.getByRole('status')).toBeInTheDocument()

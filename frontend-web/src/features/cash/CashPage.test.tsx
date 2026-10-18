@@ -9,6 +9,18 @@ const expense = { id: 'expense-1', fecha: '2026-10-04', concepto: 'Material reci
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(getCashSummary).mockResolvedValue(summary); vi.mocked(getExpenses).mockResolvedValue([expense]) })
 
 describe('CashPage', () => {
+  it('renders large expense responses incrementally without another GET', async () => {
+    vi.mocked(getExpenses).mockResolvedValue(Array.from({ length: 120 }, (_, index) => ({ ...expense, id: `expense-${index}`, concepto: `Egreso ${index}` })))
+    render(<CashPage/>)
+    expect(await screen.findByText('Egreso 0')).toBeInTheDocument()
+    expect(screen.getByText('Mostrando 50 de 120 registros recibidos')).toBeInTheDocument()
+    expect(screen.queryByText('Egreso 119')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar más registros' }))
+    expect(screen.getByText('Egreso 119')).toBeInTheDocument()
+    expect(getExpenses).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the real expense list available when only the summary request fails', async () => {
     vi.mocked(getCashSummary).mockRejectedValue(new Error('network'))
     render(<CashPage/>)

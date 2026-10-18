@@ -103,6 +103,23 @@ describe('patient views', () => {
     expect(screen.queryByRole('form', { name: 'Datos del nuevo paciente' })).not.toBeInTheDocument()
   })
 
+  it('refreshes the unfiltered page after creation without refetching the superseded search', async () => {
+    vi.mocked(getPatients).mockImplementation(async (params) => pageOf(params?.buscar ? [] : [patient]))
+    vi.mocked(createPatient).mockResolvedValue({ message: 'Paciente registrado correctamente.', patient })
+    render(<MemoryRouter><PatientsPage/></MemoryRouter>)
+    await screen.findByRole('link', { name: /Nombre recibido/ })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar pacientes' }), { target: { value: 'Sin coincidencias' } })
+    await screen.findByText('Ningún paciente coincide con la búsqueda.')
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar paciente' }))
+    const form = screen.getByRole('form', { name: 'Datos del nuevo paciente' })
+    fireEvent.change(within(form).getByLabelText(/Nombres/), { target: { value: 'Nombre recibido' } })
+    fireEvent.change(within(form).getByLabelText(/Cédula/), { target: { value: '0912345678' } })
+    fireEvent.click(within(form).getByRole('button', { name: 'Guardar paciente' }))
+    await waitFor(() => expect(createPatient).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(getPatients).toHaveBeenCalledTimes(3))
+    expect(vi.mocked(getPatients).mock.calls.map(([params]) => params?.buscar ?? '')).toEqual(['', 'Sin coincidencias', ''])
+  })
+
   it('preserves supplied optional values in the exact POST payload', async () => {
     vi.mocked(getPatients).mockResolvedValue(pageOf([]))
     vi.mocked(createPatient).mockResolvedValue({ message: 'Paciente registrado correctamente.', patient })

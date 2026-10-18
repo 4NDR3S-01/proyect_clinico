@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProtectedPhoto } from './ProtectedPhoto'
 import { getProfilePhoto } from './profilePhotoService'
@@ -10,9 +10,23 @@ beforeEach(() => {
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:protected-photo') })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
 })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('ProtectedPhoto', () => {
+  it('waits for a patient-row avatar to approach the viewport before downloading it', async () => {
+    let reveal!: () => void
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: IntersectionObserverCallback) { reveal = () => callback([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver) }
+      observe() {}
+      disconnect() {}
+    })
+    vi.mocked(getProfilePhoto).mockResolvedValue(new Blob(['photo'], { type: 'image/webp' }))
+    render(<ProtectedPhoto deferUntilVisible name="Paciente recibido" photoUrl="/api/usuarios/user-visible-99/foto"/>)
+    expect(getProfilePhoto).not.toHaveBeenCalled()
+    act(() => reveal())
+    await waitFor(() => expect(getProfilePhoto).toHaveBeenCalledExactlyOnceWith('user-visible-99', expect.any(AbortSignal)))
+  })
+
   it('uses the user ID from the backend photo route and releases the temporary Blob URL', async () => {
     vi.mocked(getProfilePhoto).mockResolvedValue(new Blob(['photo'], { type: 'image/webp' }))
     const view = render(<ProtectedPhoto name="Paciente recibido" photoUrl="https://backend.test/api/usuarios/user-42/foto"/>)

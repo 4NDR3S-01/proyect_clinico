@@ -15,7 +15,7 @@ describe('confirmed backend paths', () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: { data: [account, { ...account, id: 'assistant-1', role: 'asistente' }], current_page: 1, last_page: 1, per_page: 20, total: 2, next_page_url: null, prev_page_url: null } })
     const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { message: 'Confirmado', data: account } })
     expect(await getPatientAccounts()).toEqual([account])
-    expect(get).toHaveBeenCalledWith('/usuarios', { params: { page: 1 } })
+    expect(get).toHaveBeenCalledWith('/usuarios', { params: { page: 1 }, signal: expect.any(AbortSignal) })
     await activatePatientAccount(account.id)
     await deactivatePatientAccount(account.id)
     await unlinkPatientAccount(account.id)
@@ -27,8 +27,8 @@ describe('confirmed backend paths', () => {
     const account = { id: 'patient-account', name: 'Cuenta recibida', email: null, username: '0912345678', role: 'paciente', paciente_id: 'patient-1', activo: true, created_at: null }
     const get = vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { data: [{ ...account, id: 'assistant-account', role: 'asistente' }], current_page: 1, last_page: 2, per_page: 20, total: 2, next_page_url: '/usuarios?page=2', prev_page_url: null } }).mockResolvedValueOnce({ data: { data: [account], current_page: 2, last_page: 2, per_page: 20, total: 2, next_page_url: null, prev_page_url: '/usuarios?page=1' } })
     expect(await getPatientAccounts('Cuenta')).toEqual([account])
-    expect(get).toHaveBeenNthCalledWith(1, '/usuarios', { params: { buscar: 'Cuenta', page: 1 } })
-    expect(get).toHaveBeenNthCalledWith(2, '/usuarios', { params: { buscar: 'Cuenta', page: 2 } })
+    expect(get).toHaveBeenNthCalledWith(1, '/usuarios', { params: { buscar: 'Cuenta', page: 1 }, signal: expect.any(AbortSignal) })
+    expect(get).toHaveBeenNthCalledWith(2, '/usuarios', { params: { buscar: 'Cuenta', page: 2 }, signal: expect.any(AbortSignal) })
   })
 
   it('uses backend Caja totals and exact egreso endpoints', async () => {

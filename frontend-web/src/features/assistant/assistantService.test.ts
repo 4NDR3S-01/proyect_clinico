@@ -16,7 +16,7 @@ describe('assistantService', () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: { data: [assistant, { ...assistant, id: 'second', email: null }] } }).mockResolvedValueOnce({ data: { data: [] } })
     expect(await getAssistants()).toEqual([assistant, { ...assistant, id: 'second', email: null }])
     expect(await getAssistants()).toEqual([])
-    expect(get).toHaveBeenCalledWith('/usuarios/asistentes')
+    expect(get).toHaveBeenCalledWith('/usuarios/asistentes', { signal: undefined })
   })
 
   it('requests the confirmed GET path and validates the assistant envelope', async () => {

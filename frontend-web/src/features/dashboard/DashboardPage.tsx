@@ -1,6 +1,6 @@
 import { isAxiosError } from 'axios'
 import { ArrowRight, CalendarDays, ClipboardList, FileClock, MoreHorizontal, UsersRound, Wallet, type LucideIcon } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useClinicalQuery } from '../../services/clinicalQuery'
 import { formatCurrency, formatDate } from '../../utils/displayFormat'
@@ -86,12 +86,12 @@ export function DashboardPage() {
   const activitiesQuery = useClinicalQuery(['activities', { mes: month, anio: year }], (signal) => getActivities({ mes: month, anio: year }, signal), { enabled: canViewActivities })
   const data = { agenda: toState(agendaQuery), pending: toState(pendingQuery), patients: toState(patientsQuery), report: toState(reportQuery), activities: toState(activitiesQuery) }
 
-  const appointments = data.agenda.kind === 'ready'
-    ? data.agenda.data.filter((entry) => entry.tipo === 'cita_medica' && entry.fecha?.slice(0, 10) === todayKey(today)).sort((a, b) => (a.hora_inicio ?? '').localeCompare(b.hora_inicio ?? ''))
-    : []
-  const pendingRequests = data.pending.kind === 'ready'
-    ? data.pending.data.filter((entry) => entry.tipo === 'cita_medica' && entry.estado === 'pendiente')
-    : []
+  const appointments = useMemo(() => agendaQuery.data
+    ? agendaQuery.data.filter((entry) => entry.tipo === 'cita_medica' && entry.fecha?.slice(0, 10) === todayKey(today)).sort((a, b) => (a.hora_inicio ?? '').localeCompare(b.hora_inicio ?? ''))
+    : [], [agendaQuery.data, today])
+  const pendingRequests = useMemo(() => pendingQuery.data
+    ? pendingQuery.data.filter((entry) => entry.tipo === 'cita_medica' && entry.estado === 'pendiente')
+    : [], [pendingQuery.data])
   const quickLinks = [
     ...(canViewPatients ? [
       { to: '/pacientes', label: 'Pacientes', detail: 'Listado y registro', icon: UsersRound, tone: 'blue' },

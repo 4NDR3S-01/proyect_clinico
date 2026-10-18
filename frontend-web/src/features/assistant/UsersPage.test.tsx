@@ -36,6 +36,29 @@ function fillPassword(form: HTMLElement) {
 }
 
 describe('UsersPage', () => {
+  it('reuses the assistant list on a fresh return without another GET', async () => {
+    vi.mocked(getAssistants).mockResolvedValue([assistant])
+    const first = render(<UsersPage/>)
+    expect(await screen.findByText(assistant.name)).toBeInTheDocument()
+    first.unmount()
+    render(<UsersPage/>)
+    expect(screen.getByText(assistant.name)).toBeInTheDocument()
+    expect(getAssistants).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not request the full patient-account scan until its section is opened', async () => {
+    render(<UsersPage/>)
+    expect(await screen.findByText('No hay cuentas de asistentes registradas.')).toBeInTheDocument()
+    expect(getAssistants).toHaveBeenCalledTimes(1)
+    expect(getPatientAccounts).not.toHaveBeenCalled()
+    const toggle = screen.getByRole('button', { name: 'Ver cuentas de pacientes' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(toggle)
+    expect(await screen.findByRole('heading', { name: 'Cuentas de pacientes' })).toBeInTheDocument()
+    await waitFor(() => expect(getPatientAccounts).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: 'Ocultar cuentas de pacientes' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('shows loading, then all assistants returned by the backend', async () => {
     let resolve!: (value: Assistant[]) => void
     vi.mocked(getAssistants).mockReturnValue(new Promise((done) => { resolve = done }))

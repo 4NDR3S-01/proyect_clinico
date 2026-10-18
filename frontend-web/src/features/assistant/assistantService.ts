@@ -19,9 +19,9 @@ function requireApiBaseUrl(): void {
   if (!apiClient.defaults.baseURL) throw new Error('VITE_API_BASE_URL is not configured')
 }
 
-export async function getAssistants(): Promise<Assistant[]> {
+export async function getAssistants(signal?: AbortSignal): Promise<Assistant[]> {
   requireApiBaseUrl()
-  const { data } = await apiClient.get<unknown>('/usuarios/asistentes')
+  const { data } = await apiClient.get<unknown>('/usuarios/asistentes', { signal })
   return z.object({ data: z.array(assistantSchema) }).parse(data).data
 }
 

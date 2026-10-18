@@ -55,7 +55,8 @@ export function PatientsPage() {
       closeCreate()
       setSearch('')
       setPage(1)
-      void invalidateClinicalQueries(['patients'])
+      void markClinicalQueriesStale(['patients'])
+      void invalidateClinicalQueries(['patients', '', 1])
       void markClinicalQueriesStale(['dashboard-report'])
       void markClinicalQueriesStale(['reports'])
       return true
@@ -108,7 +109,7 @@ export function PatientsPage() {
               <div aria-hidden="true" className="admin-directory-labels hidden grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_24px] gap-4 border-b px-7 py-3 text-[11px] font-bold uppercase tracking-[0.1em] md:grid"><span>Paciente</span><span>Código</span><span>Cédula</span><span/></div>
               {state.page.data.map((patient) => (
                 <Link className="admin-patient-row flex min-w-0 items-center gap-4 border-b border-[#e6edf6] px-5 py-4 last:border-b-0 focus-visible:outline-2 focus-visible:outline-offset-[-3px] sm:px-7 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_24px]" key={patient.id} to={`/pacientes/${encodeURIComponent(patient.id)}/historial`}>
-                  <span className="flex min-w-0 flex-1 items-center gap-3 md:flex-auto"><ProtectedPhoto className="size-10 rounded-[12px] text-sm" name={patient.nombres} photoUrl={patient.foto_perfil_url}/><span className="min-w-0"><span className="block break-words text-sm font-semibold text-ink-950">{patient.nombres}</span><span className="admin-meta mt-0.5 block break-words text-xs md:hidden">Cédula: {patient.cedula}</span><span className="admin-meta mt-0.5 block break-words text-xs md:hidden">Código {patient.codigo_paciente}</span></span></span>
+                  <span className="flex min-w-0 flex-1 items-center gap-3 md:flex-auto"><ProtectedPhoto deferUntilVisible className="size-10 rounded-[12px] text-sm" name={patient.nombres} photoUrl={patient.foto_perfil_url}/><span className="min-w-0"><span className="block break-words text-sm font-semibold text-ink-950">{patient.nombres}</span><span className="admin-meta mt-0.5 block break-words text-xs md:hidden">Cédula: {patient.cedula}</span><span className="admin-meta mt-0.5 block break-words text-xs md:hidden">Código {patient.codigo_paciente}</span></span></span>
                   <span className="admin-muted hidden break-words text-sm md:block">{patient.codigo_paciente}</span><span className="admin-muted hidden break-words text-sm md:block">{patient.cedula}</span><ArrowUpRight aria-hidden="true" className="shrink-0 text-clinic-600" size={18}/>
                 </Link>
               ))}
