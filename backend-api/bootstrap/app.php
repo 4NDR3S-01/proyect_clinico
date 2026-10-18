@@ -27,8 +27,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withExceptions(function (Exceptions $exceptions): void {
         // Respuestas controladas cuando cae un servicio externo, en lugar de un 500 genérico.
         $exceptions->render(function (QueryException $e, Request $request) {
-            // SQLSTATE clase 08: errores de conexión con la base de datos.
-            if (! str_starts_with((string) $e->getCode(), '08') || ! $request->is('api/*')) {
+            // SQLSTATE clase 08: errores de conexión con la base de datos. Al fallar la
+            // conexión, PDO usa el código del driver (p. ej. 7) y el SQLSTATE solo está en el mensaje.
+            $conexion = str_starts_with((string) $e->getCode(), '08')
+                || preg_match('/SQLSTATE\[08/', $e->getMessage()) === 1;
+
+            if (! $conexion || ! $request->is('api/*')) {
                 return null;
             }
 

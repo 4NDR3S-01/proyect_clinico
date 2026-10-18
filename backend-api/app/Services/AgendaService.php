@@ -52,6 +52,20 @@ class AgendaService
             ->exists();
     }
 
+    /**
+     * Indica si la excepción es la violación de una restricción concreta. El nombre
+     * se busca sin comillas porque PostgreSQL las cambia según el idioma del servidor
+     * ("nombre" en inglés, «nombre» en español).
+     */
+    private function violaRestriccion(
+        QueryException $exception,
+        string $sqlstate,
+        string $restriccion
+    ): bool {
+        return ($exception->errorInfo[0] ?? null) === $sqlstate
+            && preg_match('/\b' . preg_quote($restriccion, '/') . '\b/u', $exception->errorInfo[2] ?? '') === 1;
+    }
+
     private function ejecutarConControlDeHorario(
         Closure $operacion,
         ?string $registroId = null
@@ -60,8 +74,7 @@ class AgendaService
             return DB::transaction($operacion);
         } catch (QueryException $exception) {
             if (
-                ($exception->errorInfo[0] ?? null) !== '23P01' ||
-                !str_contains($exception->errorInfo[2] ?? '', '"agenda_sin_solapamientos"')
+                !$this->violaRestriccion($exception, '23P01', 'agenda_sin_solapamientos')
             ) {
                 throw $exception;
             }
@@ -258,8 +271,7 @@ class AgendaService
             ]));
         } catch (QueryException $exception) {
             if (
-                ($exception->errorInfo[0] ?? null) !== '23505' ||
-                !str_contains($exception->errorInfo[2] ?? '', '"agenda_paciente_pendiente_unico"')
+                !$this->violaRestriccion($exception, '23505', 'agenda_paciente_pendiente_unico')
             ) {
                 throw $exception;
             }
@@ -806,8 +818,7 @@ class AgendaService
             });
         } catch (QueryException $exception) {
             if (
-                ($exception->errorInfo[0] ?? null) !== '23505' ||
-                !str_contains($exception->errorInfo[2] ?? '', '"agenda_paciente_pendiente_unico"')
+                !$this->violaRestriccion($exception, '23505', 'agenda_paciente_pendiente_unico')
             ) {
                 throw $exception;
             }

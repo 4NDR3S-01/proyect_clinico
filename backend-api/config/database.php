@@ -97,8 +97,11 @@ return [
             'prefix_indexes' => true,
             'search_path' => env('DB_SEARCH_PATH', 'public,private,finanzas,clinical'),
             'sslmode' => env('DB_SSLMODE', 'prefer'),
-            // Segundos máximos para conectar y para cada consulta (ver AppServiceProvider).
-            'connect_timeout' => (int) env('DB_CONNECT_TIMEOUT', 3),
+            // pdo_pgsql envía ATTR_TIMEOUT como connect_timeout (por defecto 30 s).
+            'options' => extension_loaded('pdo_pgsql') ? [
+                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECT_TIMEOUT', 3),
+            ] : [],
+            // Segundos máximos por consulta (ver AppServiceProvider).
             'statement_timeout' => (int) env('DB_STATEMENT_TIMEOUT', 15),
         ],
 

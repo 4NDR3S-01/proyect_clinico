@@ -16,7 +16,8 @@ class ResilienciaTest extends TestCase
     {
         parent::setUp();
 
-        config(['app.instancia' => 'backend-prueba']);
+        // Sin FTP real: cada prueba que lo necesite lo configura o lo simula.
+        config(['app.instancia' => 'backend-prueba', 'filesystems.disks.ftp.host' => null]);
     }
 
     public function test_health_reports_instance_and_services(): void
@@ -80,6 +81,15 @@ class ResilienciaTest extends TestCase
 
             throw new QueryException('pgsql', 'select 1', [], $pdo);
         });
+
+        // Así llega realmente cuando PostgreSQL está apagado: código del driver y SQLSTATE en el mensaje.
+        Route::get('/api/_prueba/bd-apagada', function () {
+            $pdo = new PDOException('SQLSTATE[08006] [7] connection to server at "127.0.0.1", port 5432 failed: Connection refused', 7);
+
+            throw new QueryException('pgsql', 'select * from personal_access_tokens', [], $pdo);
+        });
+
+        $this->getJson('/api/_prueba/bd-apagada')->assertStatus(503);
 
         $this->getJson('/api/_prueba/bd-caida')
             ->assertStatus(503)

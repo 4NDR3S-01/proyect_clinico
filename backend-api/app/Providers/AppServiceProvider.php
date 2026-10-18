@@ -17,10 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // Laravel no pasa estos tiempos al DSN de PostgreSQL; libpq los lee del entorno.
-        // Así una base de datos caída responde en segundos y no bloquea la instancia.
+        // Laravel no pasa statement_timeout al DSN de PostgreSQL; libpq lo lee de PGOPTIONS.
+        // Así una consulta colgada no bloquea la instancia (el de conexión va en config/database.php).
         $pgsql = config('database.connections.pgsql');
-        putenv('PGCONNECT_TIMEOUT='.max(1, (int) ($pgsql['connect_timeout'] ?? 3)));
         putenv('PGOPTIONS=-c statement_timeout='.max(1, (int) ($pgsql['statement_timeout'] ?? 15)).'s');
 
         $this->app->singleton(Brevo::class, fn () => new Brevo(
