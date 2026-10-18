@@ -43,6 +43,8 @@ Proyecto integrador IS-803 (ULEAM 2026-2). Es un sistema distribuido en cinco la
 
 ## Primeros pasos para cada integrante
 
+**Guía completa paso a paso, persona por persona: [`infraestructura/README.md`](infraestructura/README.md).** Resumen:
+
 1. Actualiza tu copia: `git switch master` y `git pull`.
 2. Conecta Tailscale y comprueba tu IP con `tailscale ip -4`; debe coincidir con la tabla.
 3. Copia el archivo de red. Debe ser idéntico en las cinco laptops.

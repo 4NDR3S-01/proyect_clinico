@@ -10,7 +10,7 @@ El balanceador reparte las peticiones entre ellos. Cada uno tiene su ventana y s
 
 ## Requisitos
 - **PHP 8.2+** para Windows (https://windows.php.net/download, versión NTS x64), descomprimido y agregado al `PATH`.
-- En `php.ini` activa estas extensiones (quita el `;` de `extension=...`): `pdo_pgsql`, `pgsql`, `ftp`, `mbstring`, `openssl`, `fileinfo`, `curl`, `zip`.
+- En `php.ini` activa estas extensiones (quita el `;` de `extension=...`): `pdo_pgsql`, `pgsql`, `ftp`, `mbstring`, `openssl`, `fileinfo`, `curl`, `zip`, y define `extension_dir = "C:\php\ext"` con la ruta completa.
 - **Composer** (https://getcomposer.org/download/).
 
 ## Instalación
