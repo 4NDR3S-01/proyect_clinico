@@ -10,6 +10,7 @@ Lo que usan todos los nodos: la red, las funciones de los instaladores y las pru
 | `comun.ps1` / `comun.sh` | Funciones de los instaladores de Windows y Linux |
 | `pruebas/balanceo.sh`, `pruebas/balanceo.ps1` | Reparto de peticiones entre backend1 y backend2 |
 | `pruebas/fallos.sh` | Guía paso a paso de las pruebas de fallo |
+| `pruebas/e2e.py` | Prueba de integración de extremo a extremo contra el sistema en vivo (web, móvil, BD, FTP, auditoría y balanceo) |
 
 ## Puertos y quién puede conectarse
 
@@ -42,6 +43,12 @@ curl -i http://100.102.99.114/api/health
 ```
 
 La cabecera `X-Backend-Instance` indica qué instancia respondió.
+
+Prueba completa de extremo a extremo (crea un paciente de prueba en cada ejecución):
+
+```bash
+DOC_PASS='contraseña de la doctora' python3 infraestructura/pruebas/e2e.py http://100.102.99.114
+```
 
 ## Comportamiento ante fallos
 
