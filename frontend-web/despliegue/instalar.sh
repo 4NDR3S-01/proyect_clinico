@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Laptop 2: compila el frontend web y lo publica con NGINX.
-# Uso: sudo ./instalar.sh   (desde infraestructura/laptop2-web, con Node.js 20+ instalado)
-source "$(dirname "$0")/../comun.sh"
+# Uso: sudo ./instalar.sh   (desde frontend-web/despliegue, con Node.js 20+ instalado)
+source "$(dirname "$0")/../../infraestructura/comun.sh"
 requiere_root
 cargar_red
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
-FRONTEND_DIR="${FRONTEND_DIR:-$DIR/../../frontend-web}"
+FRONTEND_DIR="${FRONTEND_DIR:-$DIR/..}"
 
 apt-get install -y nginx gettext-base
 

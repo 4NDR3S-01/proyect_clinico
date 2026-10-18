@@ -4,7 +4,7 @@
 #      sudo ./respaldo.sh restaurar archivo.dump
 set -euo pipefail
 
-DB_DATABASE="${DB_DATABASE:-clinica_odontologica}"
+DB_DATABASE="${DB_DATABASE:-proyect_clinico}"
 DESTINO="${DESTINO:-/var/backups/clinica}"
 
 if [[ "${1:-}" == "restaurar" ]]; then

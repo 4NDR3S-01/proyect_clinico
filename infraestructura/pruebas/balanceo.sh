@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Demuestra el reparto de peticiones entre backend1 y backend2 a través del balanceador.
 # Uso: ./balanceo.sh [URL_BALANCEADOR] [PETICIONES]
-#      ./balanceo.sh http://192.168.1.10 20
+#      ./balanceo.sh http://100.102.99.114 20
 set -uo pipefail
 
-URL="${1:-http://192.168.1.10}"
+URL="${1:-http://100.102.99.114}"
 TOTAL="${2:-20}"
 
 declare -A conteo

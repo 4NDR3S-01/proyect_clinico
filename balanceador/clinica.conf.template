@@ -10,7 +10,7 @@ log_format clinica '$remote_addr [$time_local] "$request" $status '
                    'upstream_status=$upstream_status '
                    'tiempo=$request_time upstream_tiempo=$upstream_response_time';
 
-# Dos instancias del backend (PHP-FPM) en la Laptop 3.
+# Dos instancias del backend (PHP) en la Laptop 3.
 # Si una falla 2 veces seguidas, se aparta 15 s y las peticiones van a la otra.
 upstream clinica_backend {
     least_conn;

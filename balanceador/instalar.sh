@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Laptop 1: instala y configura NGINX como reverse proxy y balanceador.
 # Uso: sudo ./instalar.sh
-source "$(dirname "$0")/../comun.sh"
+source "$(dirname "$0")/../infraestructura/comun.sh"
 requiere_root
 cargar_red
 
 apt-get install -y nginx gettext-base
 
 DIR="$(dirname "$0")"
-VARS='${BACKEND_IP} ${BACKEND1_PORT} ${BACKEND2_PORT} ${WEB_IP} ${WEB_PORT} ${BALANCEADOR_IP} ${SERVER_NAME} ${BACKEND_DIR}'
+VARS='${BACKEND_IP} ${BACKEND1_PORT} ${BACKEND2_PORT} ${WEB_IP} ${WEB_PORT} ${BALANCEADOR_IP} ${SERVER_NAME}'
 
 renderizar "$DIR/clinica.conf.template" /etc/nginx/sites-available/clinica.conf "$VARS"
 renderizar "$DIR/clinica-backend.conf.template" /etc/nginx/snippets/clinica-backend.conf "$VARS"

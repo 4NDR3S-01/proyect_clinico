@@ -4,11 +4,11 @@
 #
 # Las tablas NO se crean aquí: las crean las migraciones de Laravel
 # (php artisan migrate en la Laptop 3), que son la única fuente del esquema.
-source "$(dirname "$0")/../comun.sh"
+source "$(dirname "$0")/../infraestructura/comun.sh"
 requiere_root
 cargar_red
 
-DB_DATABASE="${DB_DATABASE:-clinica_odontologica}"
+DB_DATABASE="${DB_DATABASE:-$BD_NOMBRE}"
 DB_USERNAME="${DB_USERNAME:-clinica_app}"
 
 if [[ -z "${DB_PASSWORD:-}" ]]; then
@@ -32,9 +32,9 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'base') \gexec
 SELECT format('REVOKE ALL ON DATABASE %I FROM PUBLIC', :'base') \gexec
 SQL
 
-# Esquemas que usa DB_SEARCH_PATH en el backend.
+# En PostgreSQL 15+ el esquema public no es de libre escritura: pasa a ser de la aplicación.
+# Los demás esquemas (seguridad, clinica, citas...) los crean las migraciones de Laravel.
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d "$DB_DATABASE" -v usuario="$DB_USERNAME" <<'SQL'
-SELECT format('CREATE SCHEMA IF NOT EXISTS private AUTHORIZATION %I', :'usuario') \gexec
 SELECT format('ALTER SCHEMA public OWNER TO %I', :'usuario') \gexec
 SQL
 
