@@ -1,4 +1,4 @@
-import { BarChart3, CalendarClock, CalendarDays, ChevronDown, ClipboardList, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Settings, UserRound, UsersRound, Wallet, X, type LucideIcon } from 'lucide-react'
+import { BarChart3, CalendarClock, CalendarDays, ChevronDown, ClipboardList, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, Pill, Settings, UserRound, UsersRound, Wallet, X, type LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../features/auth/authContext'
@@ -19,6 +19,7 @@ const navItems: NavItem[] = [
   { to: '/caja', label: 'Caja', icon: Wallet, access: 'caja' },
   { to: '/pacientes', label: 'Pacientes', icon: UsersRound, access: 'pacientes' },
   { to: '/reportes', label: 'Reportes', icon: BarChart3, access: 'reportes' },
+  { to: '/plantillas-recetas', label: 'Plantillas de recetas', icon: Pill, access: 'recetas' },
   { to: '/usuarios', label: 'Usuarios', icon: UserRound, access: 'usuarios' },
   { to: '/configuracion', label: 'Configuración', icon: Settings, access: 'configuracion' },
 ]

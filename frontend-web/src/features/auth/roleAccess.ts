@@ -1,6 +1,6 @@
 import type { UserRole } from './authService'
 
-export type RestrictedArea = 'usuarios' | 'pacientes' | 'agenda' | 'actividades' | 'caja' | 'configuracion' | 'reportes'
+export type RestrictedArea = 'usuarios' | 'pacientes' | 'agenda' | 'actividades' | 'caja' | 'configuracion' | 'reportes' | 'recetas'
 
 const allowedRoles: Record<RestrictedArea, readonly UserRole[]> = {
   usuarios: ['doctora'],
@@ -10,6 +10,7 @@ const allowedRoles: Record<RestrictedArea, readonly UserRole[]> = {
   caja: ['doctora'],
   configuracion: ['doctora'],
   reportes: ['doctora'],
+  recetas: ['doctora'],
 }
 
 export function isStaffRole(role: UserRole | undefined): boolean {
