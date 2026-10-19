@@ -17,7 +17,7 @@ El instalador hace lo siguiente y se puede ejecutar varias veces:
 - Crea el usuario `clinica_app` (sin privilegios de superusuario) y lo hace dueño de `proyect_clinico`.
 - Configura PostgreSQL para escuchar en la red y registrar conexiones y consultas lentas.
 - Agrega a `pg_hba.conf` una regla que **solo permite al backend** (`100.92.238.94`).
-- Reinicia el servicio y abre el puerto 5432 en el firewall solo para el backend.
+- Reinicia el servicio y abre en el firewall el puerto `BD_PORT` de `red.env` (5433) solo para el backend.
 
 Para permitir también el mantenimiento desde otro equipo: `.\instalar.ps1 -AdminIP 100.102.99.114`.
 

@@ -24,15 +24,17 @@ $base = $red.BD_NOMBRE
 
 # 1. Ubicar psql.exe (la versión más reciente instalada).
 if (-not $PgBin) {
-    $psql = Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\psql.exe' -ErrorAction SilentlyContinue |
-        Sort-Object { [version]($_.Directory.Parent.Name -replace '[^\d.]', '') } | Select-Object -Last 1
-    if (-not $psql) { throw 'No se encontró PostgreSQL. Indica la carpeta bin con -PgBin.' }
-    $PgBin = $psql.DirectoryName
+    $PgBin = Get-PgBin
+    if (-not $PgBin) { throw 'No se encontró PostgreSQL. Indica la carpeta bin con -PgBin.' }
 }
-$psqlExe = Join-Path $PgBin ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core' ? 'psql.exe' : 'psql')
+$ext = if ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core') { '.exe' } else { '' }
+$psqlExe = Join-Path $PgBin "psql$ext"
 
 # 2. Contraseñas (no se guardan en ningún archivo).
-if (-not $env:PGPASSWORD) {
+if ($env:PGPASSWORD) {
+    Write-Host "Se usará la contraseña de $SuperUsuario definida antes en esta ventana (variable PGPASSWORD)."
+    Write-Host 'Si no es la correcta, bórrala con: Remove-Item Env:\PGPASSWORD   y vuelve a ejecutar el script.'
+} else {
     $env:PGPASSWORD = [Net.NetworkCredential]::new('', (Read-Host "Contraseña del superusuario $SuperUsuario" -AsSecureString)).Password
 }
 $clave = if ($env:CLINICA_APP_PASSWORD) { $env:CLINICA_APP_PASSWORD } else {
@@ -41,9 +43,18 @@ $clave = if ($env:CLINICA_APP_PASSWORD) { $env:CLINICA_APP_PASSWORD } else {
 if ($clave.Length -lt 10) { throw 'Usa una contraseña de al menos 10 caracteres para la aplicación.' }
 
 function Invoke-Psql([string] $Sql, [string] $Conectar = 'postgres') {
+    # psql informa los errores por stderr; con ErrorActionPreference 'Stop' (comun.ps1) eso
+    # abortaría el script sin mensaje claro. Se deja continuar y se revisa el código de salida.
+    $ErrorActionPreference = 'Continue'
     $salida = $Sql | & $psqlExe -X -q -t -A -v ON_ERROR_STOP=1 -h $Servidor -p $red.BD_PORT -U $SuperUsuario -d $Conectar `
         -v "usuario=$AppUsuario" -v "clave=$clave" -v "base=$base" 2>&1
-    if ($LASTEXITCODE) { throw "psql falló: $salida" }
+    if ($LASTEXITCODE) {
+        $texto = ($salida | ForEach-Object { if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" } }) -join [Environment]::NewLine
+        if ($texto -match 'autentificaci|authentication failed') {
+            throw "PostgreSQL rechazó la contraseña de $SuperUsuario.`n$texto"
+        }
+        throw "psql falló:`n$texto"
+    }
     return $salida
 }
 
@@ -91,7 +102,14 @@ Set-Bloque $hbaFile $reglas
 
 # 5. Reiniciar PostgreSQL y abrir el puerto solo para esos equipos.
 $servicio = if ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core') {
-    Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Con varias versiones instaladas (p. ej. 14 y 18) hay que reiniciar la que sirve $configFile,
+    # que es la misma a la que se conectó psql. Se busca por su carpeta de datos.
+    $dataDir = Split-Path $configFile
+    $todos = @(Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue)
+    $coincide = $todos | Where-Object {
+        (Get-CimInstance Win32_Service -Filter "Name='$($_.Name)'" -ErrorAction SilentlyContinue).PathName -like "*$dataDir*"
+    } | Select-Object -First 1
+    if ($coincide) { $coincide } else { $todos | Select-Object -First 1 }
 }
 if ($servicio) {
     Restart-Service $servicio.Name -Force
@@ -102,4 +120,4 @@ if ($servicio) {
 Add-ReglaFirewall 'Clinica PostgreSQL' $red.BD_PORT $autorizados
 
 Write-Host "`nPostgreSQL listo en $($red.BD_IP):$($red.BD_PORT), solo para $($autorizados -join ', ')." -ForegroundColor Green
-Write-Host "En backend-api\.env: DB_HOST=$($red.BD_IP)  DB_DATABASE=$base  DB_USERNAME=$AppUsuario  DB_PASSWORD=(la que escribiste)"
+Write-Host "En backend-api\.env: DB_HOST=$($red.BD_IP)  DB_PORT=$($red.BD_PORT)  DB_DATABASE=$base  DB_USERNAME=$AppUsuario  DB_PASSWORD=(la que escribiste)"

@@ -18,8 +18,7 @@ $base = $red.BD_NOMBRE
 $ext = if ($IsWindows -or $PSVersionTable.PSEdition -ne 'Core') { '.exe' } else { '' }
 
 if (-not $PgBin) {
-    $PgBin = (Get-ChildItem 'C:\Program Files\PostgreSQL\*\bin\pg_dump.exe' -ErrorAction SilentlyContinue |
-        Sort-Object { [version]($_.Directory.Parent.Name -replace '[^\d.]', '') } | Select-Object -Last 1).DirectoryName
+    $PgBin = Get-PgBin -Ejecutable 'pg_dump'
     if (-not $PgBin) { throw 'No se encontró PostgreSQL. Indica la carpeta bin con -PgBin.' }
 }
 if (-not $env:PGPASSWORD) {
