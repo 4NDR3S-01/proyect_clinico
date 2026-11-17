@@ -1,59 +1,83 @@
 # Práctica: arquitectura reactiva y orientada a eventos — cita médica
 
-## Qué se demuestra
+Guía para preparar y hacer la demostración **en una sola laptop**. Al final están las
+variantes con dos laptops y con los cinco nodos.
 
-Cuando una cita médica cambia, el backend **publica un evento** y los interesados
-**reaccionan solos**, sin preguntar:
+---
 
-- el panel web de la doctora muestra un aviso y la agenda se actualiza **sin recargar**;
-- una bitácora registra el evento **en segundo plano** (por una cola);
-- si el servidor de eventos se cae, las citas **se siguen guardando**.
+## 1. El problema y la solución
 
-Antes, la web se enteraba de los cambios preguntando al servidor cada cierto tiempo (*pull*).
-Ahora el servidor avisa en cuanto ocurre (*push*), en menos de un segundo.
+### El problema
 
-### Las piezas, en una frase cada una
+Cuando una paciente solicita, cancela o reprograma una cita, la doctora **no se entera**
+hasta que vuelve a cargar la página. La web solo sabía **preguntar** al servidor
+(petición–respuesta, *pull*):
 
-| Pieza | Qué hace | Dónde está |
+- el aviso llega tarde (cuando la web vuelve a consultar);
+- se hacen peticiones aunque nada haya cambiado;
+- cada pantalla que quiera enterarse tiene que preguntar por su cuenta.
+
+### La solución
+
+Que el sistema **avise** en cuanto algo pasa (*push*) y que cada interesado **reaccione solo**:
+
+| Problema | Qué se hizo | Dónde está |
 |---|---|---|
-| **Productor** | Detecta que la cita cambió y publica el evento | `backend-api/app/Observers/AgendaObserver.php` |
-| **Evento** | El hecho ocurrido, con sus datos: «cita solicitada» | `backend-api/app/Events/CitaCambioEstado.php` |
-| **Consumidor 1** (inmediato) | Envía el evento por WebSocket a los navegadores | `backend-api/app/Listeners/DifundirCambioDeCita.php` |
-| **Consumidor 2** (por cola) | Escribe la bitácora `storage/logs/eventos.log` | `backend-api/app/Listeners/RegistrarEventoDeCita.php` |
-| **Reverb** | Servidor de WebSockets: mantiene la conexión con los navegadores y les reparte los mensajes | `php artisan reverb:start` |
-| **Worker** | Proceso que atiende la cola del consumidor 2 | `php artisan queue:work` |
-| **Cliente reactivo** | La web de la doctora: recibe el evento, avisa y refresca la agenda | `frontend-web/src/features/realtime/` |
+| Nadie se entera de que la cita cambió | Cada cambio de la cita genera un **evento** («cita solicitada», «cita cancelada»…) | `backend-api/app/Observers/AgendaObserver.php` y `app/Events/CitaCambioEstado.php` |
+| La web tiene que preguntar para enterarse | El backend **empuja** el evento por **WebSocket** a la web de la doctora, que se actualiza sola | `app/Listeners/DifundirCambioDeCita.php`, **Laravel Reverb**, `frontend-web/src/features/realtime/` |
+| Guardar un registro hace esperar al usuario | La bitácora se escribe **en segundo plano**, con una **cola** y un worker | `app/Listeners/RegistrarEventoDeCita.php`, `php artisan queue:work` |
+| Agregar una reacción nueva obligaría a tocar el código de las citas | **Publicar/suscribir**: cada reacción se suscribe al evento por su cuenta | `app/Providers/AppServiceProvider.php` (`Event::listen`) |
+| Cualquiera podría escuchar los avisos | **Canales privados**: solo la doctora o la paciente dueña | `routes/channels.php` |
+| Si falla el sistema de avisos, se podría perder la cita | Si Reverb no responde, la cita **se guarda igual** y queda una advertencia | `try/catch` en `DifundirCambioDeCita.php` |
+| Avisar de una cita que al final no se guardó | El evento sale **solo después del COMMIT** en la base de datos | `ShouldHandleEventsAfterCommit` en `AgendaObserver.php` |
+
+### Cómo se conecta todo
 
 ```
- Paciente (app o curl)                                   Web de la doctora
+ Paciente (curl o app)                                    Web de la doctora
       │ POST /api/agenda/solicitar-cita                          ▲ aviso + agenda al día
       ▼                                                           │ (WebSocket)
-   Backend ── guarda en PostgreSQL ── COMMIT                      │
+   Backend ── guarda la cita en PostgreSQL ── COMMIT              │
       │                                                           │
       └─► AgendaObserver publica el evento CitaCambioEstado        │
-              ├─► Consumidor 1 ──► Reverb ────────────────────────┘
-              └─► Consumidor 2 ──► cola "eventos" ──► worker ──► eventos.log
+              ├─► Consumidor 1 ──► Reverb ────────────────────────┘   (al instante)
+              └─► Consumidor 2 ──► cola «eventos» ──► worker ──► eventos.log   (en segundo plano)
 ```
 
 ---
 
-# Parte 1 — Preparación (una sola vez, antes de presentar)
+## 2. Preparación en una sola laptop (una vez, antes de presentar)
 
-Decide **dónde** harás la demostración. Todo lo demás es igual; solo cambian estas direcciones:
+Todo corre en tu laptop: base de datos, backend, Reverb, worker y web. No depende de la
+red ni de las otras laptops. Comandos para Linux (Kali). Haz todo desde la carpeta del
+proyecto.
 
-| | **En tu laptop** (recomendado: lo controlas todo) | **En los 5 nodos** |
-|---|---|---|
-| Dirección del API (`API`) | `http://127.0.0.1:8001/api` | `http://<IP del balanceador>/api` |
-| Web de la doctora | `http://localhost:5173` | `http://<IP del balanceador>` |
-| Dónde se ejecutan Reverb y el worker | Tu laptop, carpeta `backend-api` | Laptop 3, carpeta `backend-api` |
+### 2.1 Base de datos local (PostgreSQL)
 
-En los dos casos el backend usa la base de datos del proyecto (Laptop 4), así que necesitas la red o Tailscale activos.
+```bash
+sudo systemctl start postgresql
+sudo -u postgres psql -c "CREATE USER clinica_app WITH PASSWORD 'demo123' SUPERUSER;"
+sudo -u postgres createdb -O clinica_app proyect_clinico
+```
 
-## 1.1 Configurar el backend
+### 2.2 Configurar el backend
 
-Agrega o cambia estas líneas en `backend-api/.env` (en tu laptop o en la Laptop 3):
+Guarda una copia de tu configuración actual, que apunta a la base del equipo:
+
+```bash
+cd backend-api
+cp .env .env.respaldo
+```
+
+En `backend-api/.env`, cambia o agrega estas líneas:
 
 ```ini
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=proyect_clinico
+DB_USERNAME=clinica_app
+DB_PASSWORD=demo123
+
 BROADCAST_CONNECTION=reverb
 QUEUE_CONNECTION=database
 REVERB_APP_ID=clinica
@@ -66,16 +90,31 @@ REVERB_SERVER_HOST=0.0.0.0
 REVERB_SERVER_PORT=8085
 ```
 
-Luego, en `backend-api`:
+Prepara la base y crea las cuentas de la demostración:
 
 ```bash
 composer install
 php artisan config:clear
+php artisan migrate --force
+DOCTORA_PASSWORD='Demo-2026!' php artisan db:seed --force
+php artisan tinker --execute='
+$p = App\Models\Paciente::create(["codigo_paciente"=>"0001","nombres"=>"Ana Pérez","cedula"=>"1312345678"]);
+App\Models\User::create(["name"=>"Ana Pérez","username"=>"ana","email"=>"ana@demo.test","password"=>"Demo-2026!","role"=>"paciente","paciente_id"=>$p->id]);
+App\Models\User::query()->update(["activo"=>true,"email_verified_at"=>now()]);'
 ```
 
-## 1.2 Configurar la web
+Quedan dos cuentas:
 
-**En tu laptop:** crea el archivo `frontend-web/.env.local` con:
+| Rol | Usuario | Contraseña |
+|---|---|---|
+| Doctora | `doctora` | `Demo-2026!` |
+| Paciente | `ana` | `Demo-2026!` |
+
+Para volver a usar la base del equipo después de la presentación: `cp .env.respaldo .env`.
+
+### 2.3 Configurar la web
+
+Crea el archivo `frontend-web/.env.local` con:
 
 ```ini
 VITE_API_BASE_URL=http://127.0.0.1:8001/api
@@ -84,20 +123,11 @@ VITE_REVERB_HOST=127.0.0.1
 VITE_REVERB_PORT=8085
 ```
 
-y luego `npm install` en `frontend-web`.
+y ejecuta `npm install` en `frontend-web`.
 
-**En los 5 nodos:** ver el [Anexo A](#anexo-a--despliegue-en-los-5-nodos).
+### 2.4 Antes de que empiece la presentación
 
-## 1.3 Cuentas que necesitas
-
-- La **doctora**: usuario y contraseña del sistema.
-- Una **paciente de prueba** con usuario y contraseña, **sin una solicitud de cita pendiente**. Si tiene una, cancélala con el paso 7.
-
-## 1.4 Lo que dejas corriendo antes de que empiece la presentación
-
-No hace falta explicarlo en vivo: es el sistema «normal».
-
-**Solo en tu laptop**, en dos terminales:
+Deja corriendo el sistema «normal». No hace falta explicarlo:
 
 ```bash
 # Terminal "Backend" (carpeta backend-api)
@@ -107,26 +137,44 @@ BACKEND_INSTANCE=backend1 php -S 127.0.0.1:8001 -t public
 npm run dev
 ```
 
-En los 5 nodos ya están corriendo el backend (`iniciar.ps1`), la web y NGINX.
+Abre `http://localhost:5173` en el navegador, pero **no inicies sesión todavía**.
 
-## 1.5 Ensayo rápido (5 minutos)
+### 2.5 Ensayo
 
-Haz los pasos 1 a 9 de la Parte 2 una vez antes de presentar. Si algo no responde, revisa la [Parte 4](#parte-4--si-algo-falla).
+Haz los pasos de la sección 3 una vez completos. Si algo no responde, revisa la [sección 5](#5-si-algo-falla).
 
 ---
 
-# Parte 2 — Demostración en vivo, paso a paso (≈10 minutos)
+## 3. Demostración en vivo, paso a paso (≈10 minutos)
 
 Ventanas abiertas, de izquierda a derecha:
 
 | Ventana | Para qué |
 |---|---|
-| **Navegador** | Web de la doctora, en la página **Citas médicas** |
-| **Terminal 1 — Reverb** | La abres en el paso 1 |
-| **Terminal 2 — Cola** | La abres en el paso 2 |
-| **Terminal 3 — Paciente** | Aquí actúas como la paciente con `curl` (o usas la app móvil) |
+| **Navegador** | La web de la doctora |
+| **Terminal 1 — Reverb** | El servidor de eventos. La abres en el paso 1 |
+| **Terminal 2 — Cola** | El consumidor en segundo plano. La abres en el paso 2 |
+| **Terminal 3 — Paciente** | Aquí actúas como la paciente con `curl` |
 
-Las terminales 1 y 2 van en la carpeta `backend-api` (en tu laptop o en la Laptop 3).
+Las terminales 1 y 2 van en la carpeta `backend-api`; la Terminal 3, en la carpeta del proyecto.
+
+Cada paso tiene:
+
+- **Haz:** lo que escribes o haces.
+- **Qué pasa:** lo que aparece en pantalla.
+- **Qué se hizo:** la parte de la solución que lo hace posible.
+- **Explica:** una frase para el público.
+
+---
+
+### Paso 0 — Mostrar el problema (1 minuto)
+
+**Haz:** en el navegador, inicia sesión como `doctora` y entra a **Citas médicas**. Todavía no enciendas nada más.
+
+**Qué pasa:** abajo a la derecha aparece **● Sin conexión en vivo** (o «Conectando…»). La web funciona, pero no tiene forma de enterarse sola de los cambios.
+
+**Explica:**
+> «Así estaba el sistema: si una paciente pide una cita, la doctora no se entera hasta que recarga la página. La web solo sabe preguntar. Vamos a encender las piezas que lo cambian.»
 
 ---
 
@@ -137,10 +185,15 @@ Las terminales 1 y 2 van en la carpeta `backend-api` (en tu laptop o en la Lapto
 php artisan reverb:start --debug
 ```
 
-**Verás:** `INFO  Starting server on 0.0.0.0:8085.` Con `--debug` irá mostrando cada conexión (`Connection Established`) y cada mensaje.
+**Qué pasa:**
+- En la terminal: `INFO  Starting server on 0.0.0.0:8085.`
+- En el navegador, en unos segundos, el indicador cambia solo a **● En vivo** (verde).
+- En la terminal aparece `Connection Established`: es la web de la doctora conectándose.
+
+**Qué se hizo:** se agregó **Laravel Reverb**, un servidor de WebSockets. La web de la doctora (`frontend-web/src/features/realtime/realtimeService.ts`) abre una conexión permanente con él y se reconecta sola si se corta.
 
 **Explica:**
-> «Reverb es el servidor de WebSockets. Mantiene una conexión abierta con cada navegador y les reparte los mensajes. Es el canal por donde viajan los eventos.»
+> «Reverb mantiene una conexión abierta con cada navegador. Por ahí el servidor puede avisar sin que nadie pregunte.»
 
 ---
 
@@ -151,188 +204,207 @@ php artisan reverb:start --debug
 php artisan queue:work --queue=eventos,default --sleep=1
 ```
 
-**Verás:** la terminal queda esperando. Cada vez que llegue un evento mostrará una línea `RegistrarEventoDeCita ... DONE`.
+**Qué pasa:** la terminal queda esperando trabajos.
+
+**Qué se hizo:** la bitácora (`RegistrarEventoDeCita.php`) se marcó con `implements ShouldQueue`, así que no se ejecuta durante la petición del usuario: se guarda en la cola (tabla `jobs`) y la procesa este worker.
 
 **Explica:**
-> «Este proceso atiende la cola de eventos. Trabaja aparte del que atiende a los usuarios: por eso nadie espera a que se escriba la bitácora.»
+> «Este proceso atiende los trabajos que no son urgentes. Por eso nadie tiene que esperar a que se escriba la bitácora.»
 
 ---
 
-### Paso 3 — La doctora se conecta
+### Paso 3 — Mostrar el canal privado
 
-**Haz** (Navegador):
-1. Inicia sesión como doctora y entra a **Citas médicas**.
-2. Abre las herramientas de desarrollo (**F12**) → pestaña **Red** (*Network*) → filtro **WS**.
+**Haz** (Navegador): **F12** → pestaña **Red** (*Network*) → filtro **WS** → haz clic en la conexión → pestaña **Mensajes**.
 
-**Verás:**
-- Abajo a la derecha: **● En vivo** (en verde).
-- En la pestaña WS, una conexión abierta. En *Mensajes* aparece `pusher:subscribe` al canal `private-clinica.doctora`.
-- En la Terminal 1, una conexión nueva.
+**Qué pasa:** se ve el mensaje `pusher:subscribe` al canal `private-clinica.doctora` y la respuesta `pusher_internal:subscription_succeeded`.
+
+**Qué se hizo:** para entrar a un canal privado, la web pide permiso al backend (`/api/broadcasting/auth`) con su token de sesión, y `routes/channels.php` decide: solo la doctora entra a `clinica.doctora`, y cada paciente solo a su propio `paciente.{id}`.
 
 **Explica:**
-> «La web abrió un WebSocket y se suscribió a un canal **privado**. El backend comprobó que es la doctora antes de dejarla entrar. Una paciente no puede escuchar este canal.»
+> «Los avisos no son públicos. El backend comprueba quién es antes de dejarla escuchar.»
 
 ---
 
 ### Paso 4 — La paciente inicia sesión
 
-**Haz** (Terminal 3). Primero guarda la dirección del API (ver la tabla de la Parte 1):
+**Haz** (Terminal 3):
 ```bash
 API=http://127.0.0.1:8001/api
-```
-
-Inicia sesión como la paciente:
-```bash
 curl -s -X POST $API/auth/login -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -d '{"username":"USUARIO_PACIENTE","password":"CONTRASEÑA"}' | jq
+  -d '{"username":"ana","password":"Demo-2026!"}' | jq
 ```
 
-**Verás:** una respuesta JSON con `"access_token": "5|AbC..."`. Cópiala y guárdala:
+**Qué pasa:** una respuesta JSON con `"access_token": "2|AbC..."`. Cópiala y guárdala:
 ```bash
-TOKEN='5|AbC...'
+TOKEN='2|AbC...'
 ```
 
 **Explica:**
-> «La paciente se identificó. Con este token actuará como lo haría la app móvil.»
-
-*(Si usas la app móvil, solo inicia sesión ahí y salta este paso.)*
+> «Ahora soy la paciente. Con este token hago lo mismo que haría la app móvil.»
 
 ---
 
-### Paso 5 — Evento 1: la paciente solicita una cita ⭐ (el paso central)
+### Paso 5 — La paciente solicita una cita ⭐ (el paso central)
 
 **Haz** (Terminal 3):
 ```bash
 curl -i -X POST $API/agenda/solicitar-cita -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN"
 ```
 
-**Verás**, en este orden (señala cada ventana):
-1. **Terminal 3:** `HTTP/1.1 201 Created`. En el JSON, copia el `"id"` de la cita y guárdalo:
-   ```bash
-   CITA='01a1e95f-...'
-   ```
-2. **Navegador:** aparece el aviso **«(nombre) solicitó una cita»** y el contador de *Solicitudes pendientes* sube **sin recargar la página**. En la pestaña WS, un mensaje `cita_actualizada` con los datos del evento.
-3. **Terminal 1 (Reverb):** `Message Received` / `Message Handled`, el mensaje que repartió.
+**Qué pasa**, en este orden (señala cada ventana):
+1. **Terminal 3:** `HTTP/1.1 201 Created`. Copia el `"id"` de la cita y guárdalo: `CITA='01a1...'`.
+2. **Navegador:** aparece el aviso **«Ana Pérez solicitó una cita»** y el contador de *Solicitudes pendientes* sube a 1 **sin recargar**. En la pestaña WS llega el mensaje `cita_actualizada` con los datos del evento.
+3. **Terminal 1 (Reverb):** `Message Received` / `Message Handled`: el mensaje que repartió.
 4. **Terminal 2 (Cola):** `App\Listeners\RegistrarEventoDeCita ... DONE`.
 
+**Qué se hizo:**
+- El backend guarda la cita como siempre. El código del caso de uso **no cambió**.
+- `AgendaObserver` vigila las citas y, **después del COMMIT**, publica el evento `CitaCambioEstado` de tipo `solicitada`.
+- Dos suscriptores reaccionan por separado:
+  - `DifundirCambioDeCita` lo envía por Reverb al instante: es el aviso en la web.
+  - `RegistrarEventoDeCita` lo deja en la cola para la bitácora.
+- La web recibe el mensaje y vuelve a pedir la agenda (`LiveAppointments.tsx`): por eso el contador se actualiza.
+
 **Explica:**
-> «La paciente solo hizo **una** petición. El backend guardó la cita y publicó **un** evento. Dos consumidores reaccionaron por su cuenta: uno avisó a la doctora al instante y el otro escribió la bitácora por la cola. La paciente no sabe que existen: eso es el **desacoplamiento** de publicar/suscribir.»
+> «La paciente hizo **una** petición. El backend guardó la cita y publicó **un** evento. Dos partes reaccionaron por su cuenta: una avisó a la doctora al instante y la otra escribió la bitácora. La paciente no sabe que existen. Eso es el desacoplamiento de publicar/suscribir.»
 
 ---
 
-### Paso 6 — Evento 2: la doctora programa la cita
+### Paso 6 — La doctora programa la cita
 
-**Haz** (Navegador): pestaña **Solicitudes pendientes** → **Programar** → elige una fecha futura y una hora → guardar.
+**Haz** (Navegador): pestaña **Solicitudes pendientes** → **Programar** → una fecha futura y una hora → guardar.
 
-**Verás:** un nuevo mensaje `cita_actualizada` con `"tipo": "programada"` en la pestaña WS, en la Terminal 1 y en la Terminal 2.
+**Qué pasa:** en la pestaña WS llega un mensaje con `"tipo": "programada"`, y lo ves también en las terminales 1 y 2.
+
+**Qué se hizo:** el mismo observador detecta que el estado pasó de `pendiente` a `programada` y publica otro tipo de evento. No se programó un aviso aparte para esta acción. El evento también se envía al canal privado de la paciente: su app podría enterarse sin preguntar.
 
 **Explica:**
-> «Ahora la que produce el evento es la doctora. El mismo evento viaja también al canal privado de la paciente: su app podría enterarse sin preguntar.»
+> «Ahora la que produce el evento es la doctora. Cualquier cambio de la cita, venga de quien venga, se convierte en un evento.»
 
 ---
 
-### Paso 7 — Evento 3: la paciente cancela
+### Paso 7 — La paciente cancela
 
 **Haz** (Terminal 3):
 ```bash
 curl -i -X PUT $API/agenda/mis-citas/$CITA/cancelar -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN"
 ```
 
-**Verás:** `HTTP/1.1 200`, el aviso **«(nombre) canceló su cita»** y la agenda actualizada sola.
+**Qué pasa:** `HTTP/1.1 200`, el aviso **«Ana Pérez canceló su cita»** y la agenda se actualiza sola.
+
+**Qué se hizo:** en el observador, un `match` traduce cada cambio de estado en su tipo de evento: `solicitada`, `programada`, `reprogramacion_solicitada`, `cancelada`, `completada`…
 
 **Explica:**
-> «No tuve que programar un aviso para cada acción. El **observador** del modelo convierte cualquier cambio de estado de la cita en un evento con su tipo.»
+> «Tres acciones distintas, de dos personas distintas, y la doctora se enteró de todas al instante.»
 
 ---
 
 ### Paso 8 — La bitácora
 
-**Haz** (Terminal 3, o una terminal nueva en la carpeta `backend-api`):
+**Haz** (Terminal 3):
 ```bash
-tail -n 3 storage/logs/eventos.log
+tail -n 3 backend-api/storage/logs/eventos.log
 ```
-(En Windows: `Get-Content storage\logs\eventos.log -Tail 3`)
 
-**Verás:** una línea JSON por evento: `cita.solicitada`, `cita.programada`, `cita.cancelada`.
+**Qué pasa:** tres líneas JSON: `cita.solicitada`, `cita.programada` y `cita.cancelada`, con fecha, paciente e instancia.
+
+**Qué se hizo:** es el segundo consumidor. Lo escribió el worker de la Terminal 2, en segundo plano.
 
 **Explica:**
-> «Este es el segundo consumidor. Escribió cada evento en segundo plano, sin que nadie esperara.»
+> «Quedó registro de todo y nadie esperó por ello.»
 
 ---
 
 ### Paso 9 — Resiliencia: se cae el servidor de eventos
 
 **Haz:**
-1. En la **Terminal 1**, presiona **Ctrl+C** para apagar Reverb.
-2. Mira el **Navegador**: el indicador cambia a **● Sin conexión en vivo**.
-3. En la **Terminal 3**, repite la solicitud del paso 5:
+1. En la **Terminal 1**, presiona **Ctrl+C** para apagar Reverb. El navegador cambia a **● Sin conexión en vivo**.
+2. En la **Terminal 3**, la paciente vuelve a solicitar una cita:
    ```bash
    curl -i -X POST $API/agenda/solicitar-cita -H 'Accept: application/json' -H "Authorization: Bearer $TOKEN"
    ```
-4. Muestra el log del backend:
+3. Muestra la advertencia del backend:
    ```bash
-   grep "No se pudo difundir" storage/logs/laravel-*.log | tail -n 1
+   grep "No se pudo difundir" backend-api/storage/logs/laravel-*.log | tail -n 1
    ```
-5. Vuelve a encender Reverb en la **Terminal 1**: `php artisan reverb:start --debug`.
+4. Enciende Reverb otra vez en la **Terminal 1**: `php artisan reverb:start --debug`.
 
-**Verás:**
+**Qué pasa:**
 - La solicitud respondió **`201 Created`**: la cita **se guardó igual**.
 - El log dice `No se pudo difundir el evento de la cita por WebSocket`.
 - La **Terminal 2** sí procesó el evento: la bitácora no depende de Reverb.
 - Al volver Reverb, el navegador regresa solo a **● En vivo**, sin recargar.
 
-**Explica:**
-> «Falló el sistema de avisos, no el negocio. Los consumidores son independientes: uno falló y el otro siguió. Es **degradación controlada**, igual que con el servidor de archivos en la Unidad 3.»
+**Qué se hizo:** el envío por WebSocket está protegido con `try/catch` en `DifundirCambioDeCita.php`. Si falla, se anota una advertencia y la petición termina bien. Los dos consumidores son independientes: que uno falle no detiene al otro.
 
-**Al terminar:** cancela esta última solicitud copiando su `id` y repitiendo el paso 7, para dejar a la paciente lista para otra demostración.
+**Explica:**
+> «Falló el sistema de avisos, no el negocio. Es degradación controlada: el sistema sigue funcionando con menos, y se recupera solo.»
+
+**Al terminar:** cancela esa última solicitud. Copia su `id` y repite el paso 7, para dejar a la paciente lista para otra demostración.
 
 ---
 
-# Parte 3 — Mostrar el código (2 minutos)
+## 4. Mostrar el código (2 minutos)
 
-Abre los archivos en este orden (están en `backend-api/`, salvo el último):
+Abre los archivos en este orden (en `backend-api/`, salvo el último):
 
 | # | Archivo | Qué señalar |
 |---|---|---|
-| 1 | `app/Observers/AgendaObserver.php` | `implements ShouldHandleEventsAfterCommit`: solo publica si la cita **se guardó de verdad**. El `match` traduce el cambio de estado en el tipo de evento. |
-| 2 | `app/Events/CitaCambioEstado.php` | El evento: datos del hecho y la `instancia` del backend que lo produjo. |
-| 3 | `app/Providers/AppServiceProvider.php` | Las dos líneas `Event::listen(...)`. **Agregar un consumidor nuevo es una línea**, sin tocar al productor. |
+| 1 | `app/Observers/AgendaObserver.php` | `implements ShouldHandleEventsAfterCommit`: solo publica si la cita se guardó de verdad. El `match` traduce el cambio de estado en el tipo de evento. |
+| 2 | `app/Events/CitaCambioEstado.php` | El evento: los datos del hecho y la instancia del backend que lo produjo. |
+| 3 | `app/Providers/AppServiceProvider.php` | Las dos líneas `Event::listen(...)`. **Agregar una reacción nueva es una línea**, sin tocar al productor. |
 | 4 | `app/Listeners/DifundirCambioDeCita.php` | El `try/catch`: por eso el paso 9 respondió 201. |
-| 5 | `app/Listeners/RegistrarEventoDeCita.php` | `implements ShouldQueue`: esa sola palabra lo manda a la cola. |
+| 5 | `app/Listeners/RegistrarEventoDeCita.php` | `implements ShouldQueue`: esa sola línea lo manda a la cola. |
 | 6 | `routes/channels.php` | Quién puede escuchar cada canal privado. |
-| 7 | `frontend-web/src/features/realtime/LiveAppointments.tsx` | Al llegar el evento: `invalidateClinicalQueries(['agenda'])` (refresca) y el aviso. |
+| 7 | `frontend-web/src/features/realtime/LiveAppointments.tsx` | Al llegar el evento: `invalidateClinicalQueries(['agenda'])` refresca la agenda y aparece el aviso. |
 
 ---
 
-# Parte 4 — Si algo falla
+## 5. Si algo falla
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| La web dice **● Sin conexión en vivo** todo el tiempo | Reverb no está corriendo, o la clave no coincide | Revisa la Terminal 1. `VITE_REVERB_APP_KEY` (web) debe ser igual a `REVERB_APP_KEY` (backend). Reinicia `npm run dev` si cambiaste `.env.local`. |
-| La web dice **● En vivo** pero no llega el aviso | El backend no publica en Reverb | En `backend-api/.env`: `BROADCAST_CONNECTION=reverb`. Luego `php artisan config:clear` y reinicia el backend. |
-| No aparece el indicador **En vivo** | La sesión no es de la doctora, o falta `VITE_REVERB_APP_KEY` | Inicia sesión como doctora. Revisa `frontend-web/.env.local`. |
-| Al solicitar: **409** «Ya tienes una solicitud de cita pendiente» | La paciente ya tiene una pendiente | Cancélala (paso 7 con su `id`) o usa otra paciente. |
-| **401 Unauthenticated** en `curl` | Token mal copiado o vencido | Repite el paso 4. El token va entre comillas simples. |
-| La bitácora no cambia | El worker no está corriendo | Revisa la Terminal 2. Si cambiaste `.env`, reinícialo (Ctrl+C y otra vez el paso 2). |
-| `Address already in use` al iniciar Reverb | Ya hay otro Reverb abierto | Ciérralo, o busca el proceso con `lsof -i :8085`. |
-| `jq: command not found` | Falta `jq` | Quita `\| jq` del comando: el JSON sale en una sola línea; busca `access_token`. |
+| La web dice **● Sin conexión en vivo** todo el tiempo | Reverb no está corriendo, o la clave no coincide | Revisa la Terminal 1. `VITE_REVERB_APP_KEY` (web) debe ser igual a `REVERB_APP_KEY` (backend). Si cambiaste `.env.local`, reinicia `npm run dev`. |
+| La web dice **● En vivo** pero no llega el aviso | El backend no está publicando en Reverb | En `backend-api/.env`: `BROADCAST_CONNECTION=reverb`. Luego `php artisan config:clear` y reinicia la terminal «Backend». |
+| No aparece el indicador | La sesión no es de la doctora, o falta `VITE_REVERB_APP_KEY` | Inicia sesión como `doctora`. Revisa `frontend-web/.env.local`. |
+| Al solicitar: **409** «Ya tienes una solicitud de cita pendiente» | La paciente ya tiene una pendiente | Cancélala (paso 7 con su `id`). |
+| **401** en `curl` | Token mal copiado | Repite el paso 4. El token va entre comillas simples. |
+| La bitácora no cambia | El worker no está corriendo | Revisa la Terminal 2. Si cambiaste `.env`, reinícialo. |
+| `Address already in use` | Ya hay otro proceso en ese puerto | Ciérralo, o búscalo con `lsof -i :8085` (o `:8001`, `:5173`). |
+| `connection refused` al migrar | PostgreSQL apagado | `sudo systemctl start postgresql` |
+| `jq: command not found` | Falta `jq` | Quita `\| jq`: el JSON sale en una sola línea; busca `access_token`. |
 
 ---
 
 # Anexos
 
-## Anexo A — Despliegue en los 5 nodos
+## Anexo A — Con dos laptops
+
+Igual que la sección 2, pero la **Laptop 1** corre todo (base de datos, backend, Reverb,
+worker y web) y la **Laptop 2** es la paciente. Así el público ve que el aviso cruza la red.
+Las dos laptops deben estar en la misma red (switch, wifi o Tailscale). `IP1` es la IP de la Laptop 1.
+
+**En la Laptop 1:**
+- `frontend-web/.env.local`: `VITE_API_BASE_URL=http://IP1:8001/api` y `VITE_REVERB_HOST=IP1`.
+- Backend: `BACKEND_INSTANCE=backend1 php -S 0.0.0.0:8001 -t public`.
+- Web: `npm run dev -- --host`.
+- Reverb y worker: igual que en los pasos 1 y 2. Reverb ya escucha en `0.0.0.0`.
+- Si hay firewall, abre los puertos 8001, 8085 y 5173.
+
+**En la Laptop 2:**
+- Los pasos 4 a 9 de la paciente, con `API=http://IP1:8001/api`.
+- Opcional: abre la web en `http://IP1:5173` e inicia sesión como doctora. El aviso llega a las dos pantallas a la vez.
+
+## Anexo B — En los 5 nodos del proyecto
 
 1. **`red.env` en todas las laptops:** agregar `REVERB_PORT=8085` y `REVERB_APP_KEY=clinica-clave` (ver `infraestructura/red.env.example`).
-2. **Laptop 3 (backend):** el bloque de la sección 1.1 en `backend-api\.env`. Luego `composer install` y `.\instalar.ps1`, que abre el puerto 8085 solo para el balanceador.
-   Para la demo, en vez de los pasos 1 y 2 puedes usar `.\eventos.ps1`, que abre Reverb y el worker en dos ventanas.
+2. **Laptop 3 (backend):** en `backend-api\.env`, el bloque de Reverb de la sección 2.2, sin cambiar la base de datos. Luego `composer install` y `.\instalar.ps1`, que abre el puerto 8085 solo para el balanceador. `.\eventos.ps1` abre Reverb y el worker en dos ventanas.
 3. **Laptop 1 (balanceador):** `sudo ./balanceador/instalar.sh`. Agrega a NGINX el paso de WebSockets `/app/` → Laptop 3:8085.
-4. **Laptop 2 (web):** `.\instalar.ps1`. Vuelve a compilar la web con las variables `VITE_REVERB_*`, tomadas de `red.env`.
-5. **Comprobar:** en la web de la doctora debe aparecer **● En vivo**.
+4. **Laptop 2 (web):** `.\instalar.ps1` vuelve a compilar la web con las variables `VITE_REVERB_*`.
+5. **En la demo:** `API=http://<IP del balanceador>/api`. Con dos instancias del backend, el aviso muestra «Procesado por backend1» o «backend2». Sirve para explicar el balanceo: las dos publican al mismo Reverb.
 
-Con dos instancias del backend, el aviso muestra «Procesado por backend1» o «backend2». Sirve para explicar que ambas publican al mismo Reverb (balanceo).
-
-## Anexo B — El mensaje que viaja por el WebSocket
+## Anexo C — El mensaje que viaja por el WebSocket
 
 ```json
 {
@@ -351,19 +423,19 @@ Con dos instancias del backend, el aviso muestra «Procesado por backend1» o «
 
 Tipos de evento: `solicitada`, `creada`, `programada`, `reprogramacion_solicitada`, `reprogramada`, `cancelada`, `completada`, `actualizada`.
 
-## Anexo C — Principios reactivos que se cumplen
+## Anexo D — Principios reactivos que se cumplen
 
-- **Responsivo:** la doctora ve la solicitud en menos de un segundo; la paciente recibe su 201 sin esperar a la bitácora.
+- **Responsivo:** la doctora ve la solicitud en menos de un segundo (485 ms en el ensayo); la paciente recibe su 201 sin esperar a la bitácora.
 - **Resiliente:** si Reverb se cae, las citas se guardan igual (paso 9). Si el worker se detiene, los eventos esperan en la cola.
-- **Elástico:** las dos instancias del backend publican al mismo Reverb.
+- **Elástico:** varias instancias del backend pueden publicar al mismo Reverb (Anexo B).
 - **Orientado a mensajes:** las piezas se comunican con mensajes asíncronos, sin conocerse entre sí.
 
-## Anexo D — Respaldo automático y oyente de terminal
+## Anexo E — Respaldo automático y oyente de terminal
 
 - `infraestructura/pruebas/demo-eventos.sh <API>` hace los eventos de los pasos 5 a 7 (más una reprogramación) presionando Enter. Úsalo solo si algo falla en vivo.
-- `node frontend-web/scripts/escuchar-eventos.mjs <API> <host> <puerto> clinica-clave` imprime en una terminal los mismos eventos que recibe la web. Sirve si no puedes mostrar el navegador.
+- `node frontend-web/scripts/escuchar-eventos.mjs <API> 127.0.0.1 8085 clinica-clave` imprime en una terminal los mismos eventos que recibe la web. Sirve si no puedes mostrar el navegador.
 
-## Anexo E — Pruebas automatizadas
+## Anexo F — Pruebas automatizadas
 
 ```bash
 cd backend-api && php artisan test --filter=EventosCitaTest     # 10 pruebas
@@ -387,13 +459,13 @@ Captura del ensayo (17-nov-2026): el aviso llegó 485 ms después de la solicitu
 
 ![Panel de la doctora recibiendo el evento en vivo](img/eventos-panel-en-vivo.png)
 
-## Anexo F — Preguntas probables
+## Anexo G — Preguntas probables
 
 **¿Qué diferencia hay entre un evento y una petición?**
 Una petición pide algo y espera respuesta («créame una cita»). Un evento informa algo que ya pasó («se solicitó una cita») y no espera nada de quien lo escucha.
 
 **¿Por qué WebSocket y no consultar cada X segundos (polling)?**
-Con polling el aviso llega con hasta X segundos de retraso, y hay peticiones aunque nada cambie. El WebSocket deja la conexión abierta y el servidor avisa en cuanto ocurre.
+Con polling, el aviso llega con hasta X segundos de retraso y hay peticiones aunque nada cambie. El WebSocket deja la conexión abierta y el servidor avisa en cuanto ocurre.
 
 **¿Por qué un consumidor inmediato y otro por cola?**
 El aviso tiene que ser inmediato, y si falla no pasa nada grave: la web se pone al día en su siguiente consulta. La bitácora no puede perderse pero no es urgente: la cola la separa de la petición y la reintenta hasta 3 veces.
@@ -408,10 +480,10 @@ Las citas se siguen guardando, el backend deja una advertencia en el log y la we
 No. El observador publica solo después del COMMIT (`ShouldHandleEventsAfterCommit`).
 
 **¿Quién puede escuchar los eventos?**
-Solo quien autoriza `routes/channels.php`: la doctora en `clinica.doctora`, y cada paciente únicamente en su propio `paciente.{id}`. Se valida con el mismo token de la sesión.
+Solo quien autoriza `routes/channels.php`: la doctora en `clinica.doctora` y cada paciente únicamente en su propio `paciente.{id}`. Se valida con el mismo token de la sesión.
 
 **¿Por qué Reverb y no Kafka o RabbitMQ?**
-Reverb es el servidor de WebSockets oficial de Laravel. Corre en PHP sin servicios extra y encaja con la decisión del equipo de no usar contenedores. Para el volumen de una clínica alcanza. Si creciera, Reverb puede escalar con Redis y la cola podría pasar a RabbitMQ sin cambiar el productor ni los consumidores.
+Reverb es el servidor de WebSockets oficial de Laravel: corre en PHP, sin servicios extra, y encaja con la decisión del equipo de no usar contenedores. Para el volumen de una clínica alcanza. Si creciera, Reverb puede escalar con Redis, y la cola podría pasar a RabbitMQ sin cambiar el productor ni los consumidores.
 
 **¿Qué se podría agregar?**
 Que la app móvil escuche el canal de la paciente para avisarle cuando la doctora programa su cita, y un tercer consumidor que envíe recordatorios por correo.
