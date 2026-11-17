@@ -11,7 +11,8 @@ DIR="$(dirname "$0")"
 # --publico: además publica el API en 127.0.0.1:PUBLICO_PORT para Tailscale Funnel (web en Vercel).
 PUBLICO=0; [[ "${1:-}" == "--publico" ]] && PUBLICO=1
 export PUBLICO_PORT="${PUBLICO_PORT:-8090}"
-VARS='${BACKEND_IP} ${BACKEND1_PORT} ${BACKEND2_PORT} ${WEB_IP} ${WEB_PORT} ${BALANCEADOR_IP} ${SERVER_NAME} ${PUBLICO_PORT}'
+export REVERB_PORT="${REVERB_PORT:-8085}"
+VARS='${BACKEND_IP} ${BACKEND1_PORT} ${BACKEND2_PORT} ${WEB_IP} ${WEB_PORT} ${BALANCEADOR_IP} ${SERVER_NAME} ${PUBLICO_PORT} ${REVERB_PORT}'
 
 renderizar "$DIR/clinica.conf.template" /etc/nginx/sites-available/clinica.conf "$VARS"
 renderizar "$DIR/clinica-backend.conf.template" /etc/nginx/snippets/clinica-backend.conf "$VARS"

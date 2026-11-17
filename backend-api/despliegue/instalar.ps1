@@ -41,5 +41,7 @@ if ($envTexto -match '(?m)^DOCTORA_PASSWORD=.{8,}') { & php artisan db:seed --fo
 # 4. Las instancias solo aceptan conexiones del balanceador.
 Add-ReglaFirewall 'Clinica backend1' $red.BACKEND1_PORT @($red.BALANCEADOR_IP)
 Add-ReglaFirewall 'Clinica backend2' $red.BACKEND2_PORT @($red.BALANCEADOR_IP)
+# WebSockets (Laravel Reverb): los clientes llegan a través del balanceador.
+if ($red.REVERB_PORT) { Add-ReglaFirewall 'Clinica eventos (Reverb)' $red.REVERB_PORT @($red.BALANCEADOR_IP) }
 
 Write-Host "`nBackend listo. Inicia las instancias con: .\iniciar.ps1" -ForegroundColor Green

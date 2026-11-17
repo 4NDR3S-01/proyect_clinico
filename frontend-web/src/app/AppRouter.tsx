@@ -10,6 +10,7 @@ import { LoadingState } from '../components/states/LoadingState'
 import { AppLayout } from '../layouts/AppLayout'
 import { PublicLayout } from '../layouts/PublicLayout'
 import { PublicHomePage } from '../features/public-home/PublicHomePage'
+import { LiveAppointments } from '../features/realtime/LiveAppointments'
 
 const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })))
 const AgendaPage = lazy(() => import('../features/agenda/AgendaPage').then((module) => ({ default: module.AgendaPage })))
@@ -76,6 +77,7 @@ function ProtectedArea() {
       </div>
     ) : null}
     <AppLayout/>
+    <LiveAppointments/>
   </>
 }
 

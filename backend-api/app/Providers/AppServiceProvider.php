@@ -2,10 +2,16 @@
 
 namespace App\Providers;
 
+use App\Events\CitaCambioEstado;
+use App\Listeners\DifundirCambioDeCita;
+use App\Listeners\RegistrarEventoDeCita;
+use App\Models\Agenda;
+use App\Observers\AgendaObserver;
 use Brevo\Brevo;
 use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -43,6 +49,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Arquitectura orientada a eventos: el modelo produce eventos de dominio
+        // y cada consumidor se suscribe aquí, sin que el productor lo conozca.
+        Agenda::observe(AgendaObserver::class);
+        Event::listen(CitaCambioEstado::class, DifundirCambioDeCita::class);
+        Event::listen(CitaCambioEstado::class, RegistrarEventoDeCita::class);
+
         RateLimiter::for('password-forgot', function (Request $request): array {
             $email = $request->input('email');
             $key = hash('sha256', is_string($email) ? Str::lower(trim($email)) : '');
