@@ -37,6 +37,8 @@ use App\Http\Controllers\Api\Servicio\CategoriaServicioController;
 use App\Http\Controllers\Api\Servicio\ServicioConsultorioController;
 
 use App\Http\Controllers\Api\Sistema\SaludController;
+use App\Http\Controllers\Api\Normalizacion\NormalizacionCitaMedicaController;
+use App\Services\Normalizacion\NormalizadorCitaMedica;
 
 use App\Http\Controllers\Api\Receta\RecetaController;
 use App\Http\Controllers\Api\Receta\PlantillaRecetaController;
@@ -479,3 +481,17 @@ Route::prefix('plantillas-receta')->group(function () {
     });
 
 });
+
+// Práctica 2.3 (William Cabrera): traducción y normalización de la cita médica.
+// Origen A = formulario web de recepción, origen B = app móvil → contrato común de /agenda/cita-medica.
+Route::middleware('auth:sanctum', 'role:doctora')
+    ->prefix('normalizacion/cita-medica')
+    ->group(function () {
+
+        Route::post('/{origen}', [NormalizacionCitaMedicaController::class, 'normalizar'])
+            ->whereIn('origen', NormalizadorCitaMedica::ORIGENES);
+
+        Route::post('/{origen}/registrar', [NormalizacionCitaMedicaController::class, 'registrar'])
+            ->whereIn('origen', NormalizadorCitaMedica::ORIGENES);
+
+    });
