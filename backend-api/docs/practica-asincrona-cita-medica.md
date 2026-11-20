@@ -55,6 +55,7 @@ El envío al paciente es **simulado**: el consumidor arma el texto del aviso, es
 | La cita se canceló antes de procesar | Estado `descartada`, `ack` |
 | Mensaje repetido | Se ignora (`consumidor.duplicado_ignorado`) y se hace `ack` |
 | El consumidor muere antes del `ack` | RabbitMQ devuelve el mensaje a la cola y lo toma el siguiente consumidor |
+| Se pierde la conexión con RabbitMQ (broker reiniciado, red caída o laptop suspendida) | El consumidor registra `consumidor.conexion_perdida`, espera 5 s y se vuelve a conectar solo |
 
 ## Cómo ejecutarlo
 
