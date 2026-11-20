@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Events\CitaCambioEstado;
 use App\Listeners\DifundirCambioDeCita;
 use App\Listeners\RegistrarEventoDeCita;
+use App\Mensajeria\PublicadorMensajes;
+use App\Mensajeria\RabbitMqPublicador;
 use App\Models\Agenda;
 use App\Observers\AgendaObserver;
 use Brevo\Brevo;
@@ -27,6 +29,9 @@ class AppServiceProvider extends ServiceProvider
         // Así una consulta colgada no bloquea la instancia (el de conexión va en config/database.php).
         $pgsql = config('database.connections.pgsql');
         putenv('PGOPTIONS=-c statement_timeout='.max(1, (int) ($pgsql['statement_timeout'] ?? 15)).'s');
+
+        // Práctica 3.1: el productor publica en RabbitMQ (en las pruebas se cambia por uno falso).
+        $this->app->bind(PublicadorMensajes::class, RabbitMqPublicador::class);
 
         $this->app->singleton(Brevo::class, fn () => new Brevo(
             apiKey: (string) config('services.brevo.api_key'),
