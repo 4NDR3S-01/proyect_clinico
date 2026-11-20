@@ -32,6 +32,7 @@ foreach ($clave in $esperado.Keys) {
 # 3. Dependencias, clave de la aplicación, esquema y cuenta inicial.
 & composer install --no-dev --optimize-autoloader --no-interaction
 if ($LASTEXITCODE) { throw 'composer install falló.' }
+if ($envTexto -match '(?m)^APP_DEBUG=true') { Write-Warning 'APP_DEBUG=true expone trazas internas en las respuestas de error: usa APP_DEBUG=false en el servidor.' }
 if ($envTexto -notmatch '(?m)^APP_KEY=base64') { & php artisan key:generate --force }
 & php artisan config:clear
 & php artisan migrate --force

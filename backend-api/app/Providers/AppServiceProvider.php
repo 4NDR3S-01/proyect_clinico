@@ -7,11 +7,13 @@ use App\Listeners\DifundirCambioDeCita;
 use App\Listeners\RegistrarEventoDeCita;
 use App\Models\Agenda;
 use App\Observers\AgendaObserver;
+use App\Policies\CitaMedicaPolicy;
 use Brevo\Brevo;
 use GuzzleHttp\Client;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -54,6 +56,9 @@ class AppServiceProvider extends ServiceProvider
         Agenda::observe(AgendaObserver::class);
         Event::listen(CitaCambioEstado::class, DifundirCambioDeCita::class);
         Event::listen(CitaCambioEstado::class, RegistrarEventoDeCita::class);
+
+        // Autorización por rol y propietario de la cita médica (Práctica 2.4).
+        Gate::policy(Agenda::class, CitaMedicaPolicy::class);
 
         RateLimiter::for('password-forgot', function (Request $request): array {
             $email = $request->input('email');

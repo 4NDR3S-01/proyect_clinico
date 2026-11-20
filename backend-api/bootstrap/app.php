@@ -35,6 +35,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
         ]);
 
+        // La API no tiene pantalla de login a la que redirigir: un cliente sin
+        // token recibe 401 en JSON (ver shouldRenderJsonWhen más abajo).
+        $middleware->redirectGuestsTo(
+            fn (Request $request) => $request->is('api/*') ? null : '/'
+        );
+
         // Los proxies de confianza se leen de config/trustedproxy.php (TRUSTED_PROXIES).
         $middleware->prepend(IdentificarInstancia::class);
 
@@ -43,6 +49,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->appendToPriorityList(Authenticate::class, ContextoAuditoria::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // La API siempre responde en JSON: sin token es 401 (no una redirección a
+        // un login web que no existe) y sin permiso es 403, aunque falte Accept.
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request) => $request->is('api/*') || $request->expectsJson()
+        );
+
         // Respuestas controladas cuando cae un servicio externo, en lugar de un 500 genérico.
         $exceptions->render(function (QueryException $e, Request $request) {
             // SQLSTATE clase 08: errores de conexión con la base de datos. Al fallar la

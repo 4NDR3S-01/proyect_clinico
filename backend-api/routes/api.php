@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\Sistema\SaludController;
 
 use App\Http\Controllers\Api\Receta\RecetaController;
 use App\Http\Controllers\Api\Receta\PlantillaRecetaController;
+use App\Http\Controllers\Api\Seguridad\CitaMedicaProtegidaController;
 
 
 
@@ -479,3 +480,18 @@ Route::prefix('plantillas-receta')->group(function () {
     });
 
 });
+
+// Práctica 2.4 (William Cabrera): cita médica con autenticación y autorización.
+// auth:sanctum exige un token válido (401) y CitaMedicaPolicy decide por rol y
+// propietario (403). Ver docs/practica-seguridad-cita-medica.md.
+Route::middleware('auth:sanctum', 'role:doctora,asistente,paciente')
+    ->prefix('seguridad/citas-medicas')
+    ->group(function () {
+
+        Route::get('/{id}', [CitaMedicaProtegidaController::class, 'show'])
+            ->whereUuid('id');
+
+        Route::put('/{id}/cancelar', [CitaMedicaProtegidaController::class, 'cancelar'])
+            ->whereUuid('id');
+
+    });
