@@ -29,6 +29,8 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="LOG_EVENTOS_PATH" value="/dev/null"/>
+        <env name="LOG_MENSAJERIA_PATH" value="/dev/null"/>
+        <env name="NOTIFICACION_LATENCIA_MS" value="0"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

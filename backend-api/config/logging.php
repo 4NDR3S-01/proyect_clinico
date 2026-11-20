@@ -81,6 +81,14 @@ return [
             'formatter' => Monolog\Formatter\JsonFormatter::class,
         ],
 
+        // Práctica 3.1: productor y consumidor escriben aquí con el correlation_id.
+        'mensajeria' => [
+            'driver' => 'single',
+            'path' => env('LOG_MENSAJERIA_PATH', storage_path('logs/mensajeria.log')),
+            'level' => 'info',
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

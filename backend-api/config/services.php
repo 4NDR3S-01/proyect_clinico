@@ -39,4 +39,9 @@ return [
         ],
     ],
 
+    // Práctica 3.1: espera del proveedor simulado de correo/SMS.
+    'notificaciones' => [
+        'latencia_ms' => (int) env('NOTIFICACION_LATENCIA_MS', 2000),
+    ],
+
 ];
