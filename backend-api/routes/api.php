@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\Notificacion\NotificacionController;
 use App\Http\Controllers\Api\Actividad\ActividadController;
 
 use App\Http\Controllers\Api\Agenda\AgendaController;
+use App\Http\Controllers\Api\Asincrono\NotificacionCitaController;
 
 use App\Http\Controllers\Api\Clinica\EvidenciaClinicaController;
 
@@ -36,8 +37,6 @@ use App\Http\Controllers\Api\Servicio\CategoriaServicioController;
 use App\Http\Controllers\Api\Servicio\ServicioConsultorioController;
 
 use App\Http\Controllers\Api\Sistema\SaludController;
-
-use App\Http\Controllers\Api\Asincrono\NotificacionCitaController;
 
 
 
@@ -393,6 +392,22 @@ Route::prefix('agenda')->group(function () {
 
 });
 
+// Práctica 3.1 (William Cabrera): notificación de cita por RabbitMQ.
+// Productor (202), versión síncrona para comparar (200) y seguimiento por correlation_id.
+// Ver docs/practica-asincrona-cita-medica.md.
+Route::middleware('auth:sanctum', 'role:doctora')
+    ->prefix('mensajeria/citas-medicas/notificaciones')
+    ->group(function () {
+
+        Route::post('/', [NotificacionCitaController::class, 'asincrono']);
+
+        Route::post('/sincrona', [NotificacionCitaController::class, 'sincrono']);
+
+        Route::get('/{correlationId}', [NotificacionCitaController::class, 'estado'])
+            ->where('correlationId', '[A-Za-z0-9._:-]{8,64}');
+
+    });
+
 //Caja
 Route::prefix('egresos')->group(function () {
 
@@ -427,20 +442,3 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('configuracion')->grou
     Route::get('/cambios', [AuditoriaController::class, 'cambios']);
 
 });
-
-
-// Práctica 3.1 (William Cabrera): notificación de cita por RabbitMQ.
-// Productor (202), versión síncrona para comparar (200) y seguimiento por correlation_id.
-// Ver docs/practica-asincrona-cita-medica.md.
-Route::middleware('auth:sanctum', 'role:doctora')
-    ->prefix('mensajeria/citas-medicas/notificaciones')
-    ->group(function () {
-
-        Route::post('/', [NotificacionCitaController::class, 'asincrono']);
-
-        Route::post('/sincrona', [NotificacionCitaController::class, 'sincrono']);
-
-        Route::get('/{correlationId}', [NotificacionCitaController::class, 'estado'])
-            ->where('correlationId', '[A-Za-z0-9._:-]{8,64}');
-
-    });
