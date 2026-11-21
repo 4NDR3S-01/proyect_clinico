@@ -12,8 +12,7 @@ use App\Http\Controllers\Api\Usuario\RolController;
 use App\Http\Controllers\Api\Paciente\PacienteController;
 
 use App\Http\Controllers\Api\Clinica\HistorialClinicoController;
-use App\Http\Controllers\Api\Clinica\DiagnosticoController;
-use App\Http\Controllers\Api\Clinica\TratamientoController;
+
 use App\Http\Controllers\Api\Clinica\OdontogramaController;
 use App\Http\Controllers\Api\Clinica\RadiografiaController;
 
