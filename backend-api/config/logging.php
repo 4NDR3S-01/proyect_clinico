@@ -81,6 +81,14 @@ return [
             'formatter' => Monolog\Formatter\JsonFormatter::class,
         ],
 
+        // Práctica 3.3: cada paso del orquestador con su correlation_id.
+        'orquestacion' => [
+            'driver' => 'single',
+            'path' => env('LOG_ORQUESTACION_PATH', storage_path('logs/orquestacion.log')),
+            'level' => 'info',
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
