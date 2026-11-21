@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Usuario\UsuarioController;
 use App\Http\Controllers\Api\Usuario\RolController;
 
 use App\Http\Controllers\Api\Paciente\PacienteController;
+use App\Http\Controllers\Api\Orquestacion\ResumenCitaController;
 
 use App\Http\Controllers\Api\Clinica\HistorialClinicoController;
 use App\Http\Controllers\Api\Clinica\DiagnosticoController;
@@ -40,7 +41,6 @@ use App\Http\Controllers\Api\Sistema\SaludController;
 
 use App\Http\Controllers\Api\Receta\RecetaController;
 use App\Http\Controllers\Api\Receta\PlantillaRecetaController;
-use App\Http\Controllers\Api\Orquestacion\ResumenCitaController;
 
 
 
@@ -357,6 +357,13 @@ Route::prefix('actividades')->group(function () {
 
 });
 
+// Práctica 3.3 (William Cabrera): orquestador del resumen de cita. Consulta por
+// HTTP el servicio de citas y luego el de pacientes, y compone una respuesta.
+// Lo usa la web en Agenda > "Consultar resumen de cita". Ver docs/practica-orquestacion-resumen-cita.md.
+Route::middleware('auth:sanctum', 'role:doctora')
+    ->get('/resumen-cita/{id}', [ResumenCitaController::class, 'show'])
+    ->whereUuid('id');
+
 // Agenda
 Route::prefix('agenda')->group(function () {
 
@@ -480,10 +487,3 @@ Route::prefix('plantillas-receta')->group(function () {
     });
 
 });
-
-// Práctica 3.3 (William Cabrera): orquestador del resumen de cita. Consulta por
-// HTTP el servicio de citas y luego el de pacientes, y compone una respuesta.
-// Lo usa la web en Agenda > "Consultar resumen de cita". Ver docs/practica-orquestacion-resumen-cita.md.
-Route::middleware('auth:sanctum', 'role:doctora')
-    ->get('/resumen-cita/{id}', [ResumenCitaController::class, 'show'])
-    ->whereUuid('id');
