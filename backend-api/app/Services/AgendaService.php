@@ -9,7 +9,6 @@ use Carbon\Carbon;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use App\Events\CitaActualizada;
 
 class AgendaService
 {
@@ -284,12 +283,6 @@ class AgendaService
                 'registro' => null,
             ];
         }
-
-        event(new CitaActualizada(
-            $registro->id,
-            $registro->paciente_id,
-            'solicitada'
-        ));
 
         return [
             'estado' => 'creado',
