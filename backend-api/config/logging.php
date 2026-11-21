@@ -74,17 +74,17 @@ return [
         ],
 
         // Bitácora de eventos de dominio (práctica de arquitectura orientada a eventos).
-        'eventos' => [
-            'driver' => 'single',
-            'path' => env('LOG_EVENTOS_PATH', storage_path('logs/eventos.log')),
-            'level' => 'info',
-            'formatter' => Monolog\Formatter\JsonFormatter::class,
-        ],
-
         // Práctica 3.3: cada paso del orquestador con su correlation_id.
         'orquestacion' => [
             'driver' => 'single',
             'path' => env('LOG_ORQUESTACION_PATH', storage_path('logs/orquestacion.log')),
+            'level' => 'info',
+            'formatter' => Monolog\Formatter\JsonFormatter::class,
+        ],
+
+        'eventos' => [
+            'driver' => 'single',
+            'path' => env('LOG_EVENTOS_PATH', storage_path('logs/eventos.log')),
             'level' => 'info',
             'formatter' => Monolog\Formatter\JsonFormatter::class,
         ],
