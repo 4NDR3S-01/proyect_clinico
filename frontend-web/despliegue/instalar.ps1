@@ -22,11 +22,15 @@ try {
     & npm ci --no-audit --no-fund
     if ($LASTEXITCODE) { throw 'npm ci falló.' }
     $env:VITE_API_BASE_URL = "http://$($red.SERVER_NAME)/api"
+    # Citas en tiempo real: el WebSocket también entra por el balanceador (ws://<balanceador>/app/...).
+    $env:VITE_REVERB_APP_KEY = $red.REVERB_APP_KEY
+    $env:VITE_REVERB_HOST = $red.SERVER_NAME
+    $env:VITE_REVERB_PORT = '80'
     Write-Host "Compilando con VITE_API_BASE_URL=$env:VITE_API_BASE_URL"
     & npm run build
     if ($LASTEXITCODE) { throw 'La compilación falló.' }
 } finally {
-    Remove-Item Env:VITE_API_BASE_URL -ErrorAction SilentlyContinue
+    Remove-Item Env:VITE_API_BASE_URL, Env:VITE_REVERB_APP_KEY, Env:VITE_REVERB_HOST, Env:VITE_REVERB_PORT -ErrorAction SilentlyContinue
     Pop-Location
 }
 

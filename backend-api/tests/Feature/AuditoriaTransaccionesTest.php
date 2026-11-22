@@ -53,6 +53,7 @@ class AuditoriaTransaccionesTest extends TestCase
             '2026_10_29_000001_add_agenda_id_to_actividades_table.php',
             '2026_10_03_191440_create_sesion_registradas_table.php',
             '2026_10_18_000001_add_subido_por_to_evidencias_clinicas_table.php',
+            '2026_11_10_202239_add_nombre_reserva_to_agenda_table.php',
         ] as $migration) {
             (require database_path('migrations/'.$migration))->up();
         }
