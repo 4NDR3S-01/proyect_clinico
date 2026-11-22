@@ -18,16 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withBroadcasting(
-        __DIR__.'/../routes/channels.php',
-        [
-            'prefix' => 'api',
-            'middleware' => [
-                'api',
-                'auth:sanctum',
-            ],
-        ]
-    )
     // Los suscriptores de eventos se registran a mano en AppServiceProvider.
     ->withEvents(discover: false)
     ->withMiddleware(function (Middleware $middleware): void {

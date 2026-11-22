@@ -12,8 +12,7 @@ use App\Http\Controllers\Api\Usuario\RolController;
 use App\Http\Controllers\Api\Paciente\PacienteController;
 
 use App\Http\Controllers\Api\Clinica\HistorialClinicoController;
-use App\Http\Controllers\Api\Clinica\DiagnosticoController;
-use App\Http\Controllers\Api\Clinica\TratamientoController;
+
 use App\Http\Controllers\Api\Clinica\OdontogramaController;
 use App\Http\Controllers\Api\Clinica\RadiografiaController;
 
@@ -38,8 +37,6 @@ use App\Http\Controllers\Api\Servicio\ServicioConsultorioController;
 
 use App\Http\Controllers\Api\Sistema\SaludController;
 
-use App\Http\Controllers\Api\Receta\RecetaController;
-use App\Http\Controllers\Api\Receta\PlantillaRecetaController;
 
 
 
@@ -164,11 +161,6 @@ Route::middleware('auth:sanctum', 'role:paciente')->prefix('paciente')->group(fu
     Route::get('/mis-evidencias', [EvidenciaClinicaController::class, 'misEvidencias']);
 
     Route::post('/mis-evidencias', [EvidenciaClinicaController::class, 'subirMia']);
-
-    // Recetas del propio paciente (app móvil)
-    Route::get('/mis-recetas', [RecetaController::class, 'misRecetas']);
-
-    Route::get('/mis-recetas/{id}', [RecetaController::class, 'miReceta']);
 
     Route::get('/mis-evidencias/{id}/archivo', [EvidenciaClinicaController::class, 'archivoMio']);
 
@@ -436,46 +428,3 @@ Route::middleware('auth:sanctum', 'role:doctora')->prefix('configuracion')->grou
 });
 
 
-// Recetas: la doctora las emite; la asistente puede consultarlas
-Route::prefix('recetas')->group(function () {
-
-    Route::middleware('auth:sanctum', 'role:doctora,asistente')->group(function () {
-
-        Route::get('/', [RecetaController::class, 'index']);
-
-        Route::get('/{id}', [RecetaController::class, 'show']);
-
-    });
-
-    Route::middleware('auth:sanctum', 'role:doctora')->group(function () {
-
-        Route::post('/', [RecetaController::class, 'store']);
-
-        Route::put('/{id}', [RecetaController::class, 'update']);
-
-        Route::delete('/{id}', [RecetaController::class, 'destroy']);
-
-    });
-
-});
-
-// Plantillas de recetas
-Route::prefix('plantillas-receta')->group(function () {
-
-    Route::middleware('auth:sanctum', 'role:doctora,asistente')->group(function () {
-
-        Route::get('/', [PlantillaRecetaController::class, 'index']);
-
-    });
-
-    Route::middleware('auth:sanctum', 'role:doctora')->group(function () {
-
-        Route::post('/', [PlantillaRecetaController::class, 'store']);
-
-        Route::put('/{id}', [PlantillaRecetaController::class, 'update']);
-
-        Route::delete('/{id}', [PlantillaRecetaController::class, 'destroy']);
-
-    });
-
-});

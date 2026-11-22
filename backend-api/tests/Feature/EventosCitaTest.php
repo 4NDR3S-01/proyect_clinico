@@ -2,14 +2,11 @@
 
 namespace Tests\Feature;
 
-use App\Events\CitaActualizada;
 use App\Events\CitaCambioEstado;
-use App\Listeners\DifundirCambioDeCita;
 use App\Listeners\RegistrarEventoDeCita;
 use App\Models\Agenda;
 use App\Models\Paciente;
 use App\Models\User;
-use Illuminate\Contracts\Broadcasting\Factory as BroadcastFactory;
 use Illuminate\Events\CallQueuedListener;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -144,11 +141,10 @@ class EventosCitaTest extends TestCase
         $this->assertSame(0, Agenda::count());
     }
 
-    public function test_domain_event_has_two_independent_subscribers(): void
+    public function test_domain_event_has_its_log_subscriber(): void
     {
         Event::fake();
 
-        Event::assertListening(CitaCambioEstado::class, DifundirCambioDeCita::class);
         Event::assertListening(CitaCambioEstado::class, RegistrarEventoDeCita::class);
     }
 
@@ -161,33 +157,6 @@ class EventosCitaTest extends TestCase
         Queue::assertPushedOn('eventos', CallQueuedListener::class, fn ($job) => $job->class === RegistrarEventoDeCita::class);
     }
 
-    public function test_broadcast_goes_to_the_doctor_and_to_the_patient_private_channels(): void
-    {
-        $evento = CitaCambioEstado::desdeCita($this->cita('pendiente', null, null)->load('paciente'), 'solicitada');
-        $mensaje = new CitaActualizada($evento);
-
-        $canales = array_map(fn ($canal) => $canal->name, $mensaje->broadcastOn());
-        $this->assertSame(['private-clinica.doctora', 'private-paciente.'.$this->paciente->id], $canales);
-        $this->assertSame('cita_actualizada', $mensaje->broadcastAs());
-        $this->assertSame('solicitada', $mensaje->broadcastWith()['tipo']);
-        $this->assertSame('Ana Pérez', $mensaje->broadcastWith()['paciente_nombre']);
-    }
-
-    public function test_a_websocket_failure_does_not_break_the_request(): void
-    {
-        $this->mock(BroadcastFactory::class, function ($mock) {
-            $mock->shouldReceive('event')->andThrow(new RuntimeException('Reverb no responde'));
-        });
-        Log::spy();
-        Log::shouldReceive('channel')->andReturnSelf();
-        Sanctum::actingAs($this->pacienteUser);
-
-        $this->postJson('/api/agenda/solicitar-cita')->assertCreated();
-
-        $this->assertSame(1, Agenda::count());
-        Log::shouldHaveReceived('warning')->withArgs(fn ($mensaje) => str_contains($mensaje, 'No se pudo difundir'))->once();
-    }
-
     public function test_the_queued_subscriber_writes_the_event_log(): void
     {
         $evento = CitaCambioEstado::desdeCita($this->cita('pendiente', null, null)->load('paciente'), 'solicitada');
@@ -196,30 +165,5 @@ class EventosCitaTest extends TestCase
             && $datos['paciente_nombre'] === 'Ana Pérez');
 
         (new RegistrarEventoDeCita)->handle($evento);
-    }
-
-    public function test_private_channels_are_authorized_only_for_their_owner(): void
-    {
-        config([
-            'broadcasting.default' => 'reverb',
-            'broadcasting.connections.reverb.key' => 'clave-prueba',
-            'broadcasting.connections.reverb.secret' => 'secreto-prueba',
-            'broadcasting.connections.reverb.app_id' => '1',
-            'broadcasting.connections.reverb.options.host' => '127.0.0.1',
-        ]);
-        // Los canales se registraron al arrancar sobre el driver "null" de las pruebas.
-        require base_path('routes/channels.php');
-        $auth = fn (string $canal) => $this->postJson('/api/broadcasting/auth', [
-            'socket_id' => '1234.5678', 'channel_name' => $canal,
-        ]);
-
-        Sanctum::actingAs($this->doctora);
-        $auth('private-clinica.doctora')->assertOk()->assertJsonStructure(['auth']);
-        $auth('private-paciente.'.$this->paciente->id)->assertForbidden();
-
-        Sanctum::actingAs($this->pacienteUser);
-        $auth('private-paciente.'.$this->paciente->id)->assertOk();
-        $auth('private-clinica.doctora')->assertForbidden();
-        $auth('private-paciente.otro-paciente')->assertForbidden();
     }
 }

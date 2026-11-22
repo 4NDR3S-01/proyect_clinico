@@ -62,7 +62,7 @@ class EsquemasTrazabilidadTest extends TestCase
     {
         foreach ([
             'users' => 'seguridad', 'personal_access_tokens' => 'seguridad',
-            'pacientes' => 'clinica', 'recetas' => 'clinica', 'codigo_paciente_seq' => 'clinica',
+            'pacientes' => 'clinica', 'historiales_clinicos' => 'clinica', 'codigo_paciente_seq' => 'clinica',
             'agenda' => 'citas', 'actividades' => 'finanzas', 'servicios_consultorio' => 'catalogo',
             'acciones_registradas' => 'auditoria', 'registro_cambios' => 'auditoria', 'migrations' => 'public',
         ] as $tabla => $esquema) {

@@ -3,7 +3,6 @@
 namespace App\Providers;
 
 use App\Events\CitaCambioEstado;
-use App\Listeners\DifundirCambioDeCita;
 use App\Listeners\RegistrarEventoDeCita;
 use App\Models\Agenda;
 use App\Observers\AgendaObserver;
@@ -52,7 +51,6 @@ class AppServiceProvider extends ServiceProvider
         // Arquitectura orientada a eventos: el modelo produce eventos de dominio
         // y cada consumidor se suscribe aquí, sin que el productor lo conozca.
         Agenda::observe(AgendaObserver::class);
-        Event::listen(CitaCambioEstado::class, DifundirCambioDeCita::class);
         Event::listen(CitaCambioEstado::class, RegistrarEventoDeCita::class);
 
         RateLimiter::for('password-forgot', function (Request $request): array {
