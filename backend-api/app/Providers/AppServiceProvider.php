@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Events\CitaCambioEstado;
 use App\Listeners\RegistrarEventoDeCita;
+use App\Mensajeria\Enrutamiento\PublicadorEnrutado;
+use App\Mensajeria\Enrutamiento\RabbitMqPublicadorEnrutado;
 use App\Mensajeria\PublicadorMensajes;
 use App\Mensajeria\RabbitMqPublicador;
 use App\Models\Agenda;
@@ -31,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Práctica 3.1: el productor publica en RabbitMQ (en las pruebas se cambia por uno falso).
         $this->app->bind(PublicadorMensajes::class, RabbitMqPublicador::class);
+
+        // Práctica 3.2: el enrutador entrega cada mensaje en la cola de su destino.
+        $this->app->bind(PublicadorEnrutado::class, RabbitMqPublicadorEnrutado::class);
 
         $this->app->singleton(Brevo::class, fn () => new Brevo(
             apiKey: (string) config('services.brevo.api_key'),

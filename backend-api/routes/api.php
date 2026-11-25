@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\Actividad\ActividadController;
 
 use App\Http\Controllers\Api\Agenda\AgendaController;
 use App\Http\Controllers\Api\Asincrono\NotificacionCitaController;
+use App\Http\Controllers\Api\Enrutamiento\EnrutamientoNotificacionController;
 
 use App\Http\Controllers\Api\Clinica\EvidenciaClinicaController;
 
@@ -405,6 +406,22 @@ Route::middleware('auth:sanctum', 'role:doctora')
 
         Route::get('/{correlationId}', [NotificacionCitaController::class, 'estado'])
             ->where('correlationId', '[A-Za-z0-9._:-]{8,64}');
+
+    });
+
+// Práctica 3.2 (William Cabrera): enrutamiento y filtrado de notificaciones de citas.
+// validación -> Message Filter -> Content-Based Router -> RabbitMQ -> consumidor | no_enrutables.
+// Ver docs/practica-enrutamiento-notificaciones.md.
+Route::middleware('auth:sanctum', 'role:doctora')
+    ->prefix('enrutamiento')
+    ->group(function () {
+
+        Route::post('/notificaciones', [EnrutamientoNotificacionController::class, 'enrutar']);
+
+        Route::get('/notificaciones/{mensajeId}', [EnrutamientoNotificacionController::class, 'mostrar'])
+            ->where('mensajeId', '[A-Za-z0-9._:-]{1,64}');
+
+        Route::get('/reglas', [EnrutamientoNotificacionController::class, 'reglas']);
 
     });
 
